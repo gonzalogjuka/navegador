@@ -1,0 +1,1388 @@
+{
+  "scenario": "navegador-sin-hibernar",
+  "urls": [
+    "https://es.wikipedia.org/wiki/Buenos_Aires",
+    "https://github.com/microsoft/vscode",
+    "https://www.bbc.com/news",
+    "https://stackoverflow.com/questions/231767/what-does-the-yield-keyword-do-in-python",
+    "https://developer.mozilla.org/es/docs/Web/JavaScript",
+    "https://www.lanacion.com.ar/",
+    "https://docs.python.org/3/tutorial/index.html",
+    "https://old.reddit.com/r/argentina/",
+    "https://listado.mercadolibre.com.ar/notebook",
+    "https://www.infobae.com/",
+    "https://es.wikipedia.org/wiki/Jorge_Luis_Borges",
+    "https://github.com/torvalds/linux",
+    "https://www.clarin.com/",
+    "https://learn.microsoft.com/es-es/dotnet/csharp/",
+    "https://stackoverflow.com/questions/927358/how-do-i-undo-the-most-recent-local-commits-in-git",
+    "https://www.theguardian.com/international",
+    "https://news.ycombinator.com/",
+    "https://www.pagina12.com.ar/",
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/grid",
+    "https://www.npmjs.com/package/react"
+  ],
+  "minutes": 15.0,
+  "data_dir": "C:\\Users\\gonza\\AppData\\Local\\Temp\\navcmp-navegador-sin-hibernar-nctrq3ax",
+  "sample_seconds": 10,
+  "open_gap_ms": 3000,
+  "exe": "D:\\Repos\\Navegador\\dist\\Navegador.exe",
+  "killed_leftovers": 6,
+  "log_counts": {
+    "discard_tab": 0,
+    "budget_discard": 0,
+    "restore_tab": 0,
+    "suspend_tab": 0,
+    "automation_error": 0
+  },
+  "samples": [
+    {
+      "private_mb": 662.9,
+      "processes": 10,
+      "by_type_mb": {
+        "browser": 52.3,
+        "crashpad-handler": 3.4,
+        "gpu-process": 125.4,
+        "host": 78.8,
+        "renderer": 372.9,
+        "utility": 30.1
+      },
+      "t": 10.0,
+      "system_cpu_pct": 41.2
+    },
+    {
+      "private_mb": 1271.9,
+      "processes": 16,
+      "by_type_mb": {
+        "browser": 83.1,
+        "crashpad-handler": 3.4,
+        "gpu-process": 252.9,
+        "host": 85.1,
+        "renderer": 804.6,
+        "utility": 42.8
+      },
+      "t": 20.2,
+      "system_cpu_pct": 58.5
+    },
+    {
+      "private_mb": 1770.6,
+      "processes": 20,
+      "by_type_mb": {
+        "browser": 100.1,
+        "crashpad-handler": 3.4,
+        "gpu-process": 291.0,
+        "host": 85.8,
+        "renderer": 1247.2,
+        "utility": 43.1
+      },
+      "t": 30.1,
+      "system_cpu_pct": 36.3
+    },
+    {
+      "private_mb": 2120.9,
+      "processes": 22,
+      "by_type_mb": {
+        "browser": 121.2,
+        "crashpad-handler": 4.2,
+        "gpu-process": 327.5,
+        "host": 87.6,
+        "renderer": 1531.9,
+        "utility": 48.4
+      },
+      "t": 40.0,
+      "system_cpu_pct": 44.8
+    },
+    {
+      "private_mb": 2411.3,
+      "processes": 26,
+      "by_type_mb": {
+        "browser": 137.4,
+        "crashpad-handler": 4.3,
+        "gpu-process": 357.1,
+        "host": 89.3,
+        "renderer": 1773.3,
+        "utility": 49.9
+      },
+      "t": 50.0,
+      "system_cpu_pct": 51.8
+    },
+    {
+      "private_mb": 2432.6,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 174.1,
+        "crashpad-handler": 4.3,
+        "gpu-process": 360.4,
+        "host": 89.1,
+        "renderer": 1755.6,
+        "utility": 49.1
+      },
+      "t": 60.2,
+      "system_cpu_pct": 33.3
+    },
+    {
+      "private_mb": 2352.1,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 164.0,
+        "crashpad-handler": 3.9,
+        "gpu-process": 347.4,
+        "host": 89.5,
+        "renderer": 1700.0,
+        "utility": 47.3
+      },
+      "t": 70.2,
+      "system_cpu_pct": 19.8
+    },
+    {
+      "private_mb": 2319.0,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 163.2,
+        "crashpad-handler": 3.9,
+        "gpu-process": 347.4,
+        "host": 88.8,
+        "renderer": 1668.5,
+        "utility": 47.2
+      },
+      "t": 80.2,
+      "system_cpu_pct": 13.8
+    },
+    {
+      "private_mb": 2277.3,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 163.2,
+        "crashpad-handler": 3.9,
+        "gpu-process": 350.2,
+        "host": 86.5,
+        "renderer": 1626.7,
+        "utility": 46.8
+      },
+      "t": 90.1,
+      "system_cpu_pct": 11.8
+    },
+    {
+      "private_mb": 2269.9,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.8,
+        "crashpad-handler": 3.9,
+        "gpu-process": 346.3,
+        "host": 89.3,
+        "renderer": 1620.6,
+        "utility": 46.9
+      },
+      "t": 100.1,
+      "system_cpu_pct": 17.8
+    },
+    {
+      "private_mb": 2263.9,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.8,
+        "crashpad-handler": 3.9,
+        "gpu-process": 348.5,
+        "host": 87.0,
+        "renderer": 1614.7,
+        "utility": 46.9
+      },
+      "t": 110.1,
+      "system_cpu_pct": 10.9
+    },
+    {
+      "private_mb": 2259.1,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.9,
+        "crashpad-handler": 3.9,
+        "gpu-process": 348.5,
+        "host": 87.0,
+        "renderer": 1610.0,
+        "utility": 46.7
+      },
+      "t": 120.0,
+      "system_cpu_pct": 6.2
+    },
+    {
+      "private_mb": 2241.1,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 339.9,
+        "host": 88.3,
+        "renderer": 1599.6,
+        "utility": 46.8
+      },
+      "t": 130.2,
+      "system_cpu_pct": 14.9
+    },
+    {
+      "private_mb": 2236.4,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.5,
+        "crashpad-handler": 3.9,
+        "gpu-process": 339.8,
+        "host": 86.9,
+        "renderer": 1596.6,
+        "utility": 46.7
+      },
+      "t": 140.2,
+      "system_cpu_pct": 13.3
+    },
+    {
+      "private_mb": 2238.6,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.0,
+        "crashpad-handler": 3.9,
+        "gpu-process": 339.5,
+        "host": 86.7,
+        "renderer": 1596.9,
+        "utility": 46.6
+      },
+      "t": 150.1,
+      "system_cpu_pct": 9.7
+    },
+    {
+      "private_mb": 2226.5,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.5,
+        "crashpad-handler": 3.9,
+        "gpu-process": 339.5,
+        "host": 86.8,
+        "renderer": 1587.3,
+        "utility": 46.5
+      },
+      "t": 160.1,
+      "system_cpu_pct": 12.9
+    },
+    {
+      "private_mb": 2220.0,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 164.9,
+        "crashpad-handler": 3.9,
+        "gpu-process": 338.0,
+        "host": 86.7,
+        "renderer": 1581.5,
+        "utility": 45.0
+      },
+      "t": 170.1,
+      "system_cpu_pct": 17.2
+    },
+    {
+      "private_mb": 2218.1,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 338.0,
+        "host": 86.7,
+        "renderer": 1581.9,
+        "utility": 45.0
+      },
+      "t": 180.0,
+      "system_cpu_pct": 6.4
+    },
+    {
+      "private_mb": 2217.7,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.9,
+        "gpu-process": 336.9,
+        "host": 86.7,
+        "renderer": 1582.4,
+        "utility": 45.3
+      },
+      "t": 190.2,
+      "system_cpu_pct": 6.7
+    },
+    {
+      "private_mb": 2213.7,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.9,
+        "gpu-process": 336.9,
+        "host": 86.7,
+        "renderer": 1578.5,
+        "utility": 45.1
+      },
+      "t": 200.1,
+      "system_cpu_pct": 6.6
+    },
+    {
+      "private_mb": 2217.2,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.1,
+        "crashpad-handler": 3.9,
+        "gpu-process": 335.1,
+        "host": 88.9,
+        "renderer": 1579.3,
+        "utility": 45.0
+      },
+      "t": 210.1,
+      "system_cpu_pct": 11.4
+    },
+    {
+      "private_mb": 2207.3,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 335.1,
+        "host": 88.8,
+        "renderer": 1571.8,
+        "utility": 45.2
+      },
+      "t": 220.1,
+      "system_cpu_pct": 7.6
+    },
+    {
+      "private_mb": 2208.3,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.2,
+        "crashpad-handler": 3.9,
+        "gpu-process": 334.2,
+        "host": 89.8,
+        "renderer": 1570.1,
+        "utility": 45.2
+      },
+      "t": 230.0,
+      "system_cpu_pct": 11.6
+    },
+    {
+      "private_mb": 2194.8,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 334.2,
+        "host": 89.8,
+        "renderer": 1559.2,
+        "utility": 45.2
+      },
+      "t": 240.2,
+      "system_cpu_pct": 12.0
+    },
+    {
+      "private_mb": 2174.1,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.5,
+        "crashpad-handler": 3.9,
+        "gpu-process": 322.6,
+        "host": 87.4,
+        "renderer": 1552.7,
+        "utility": 45.0
+      },
+      "t": 250.1,
+      "system_cpu_pct": 20.6
+    },
+    {
+      "private_mb": 2175.1,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 322.6,
+        "host": 87.5,
+        "renderer": 1553.5,
+        "utility": 45.2
+      },
+      "t": 260.1,
+      "system_cpu_pct": 16.2
+    },
+    {
+      "private_mb": 2177.2,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.1,
+        "crashpad-handler": 3.9,
+        "gpu-process": 321.6,
+        "host": 87.4,
+        "renderer": 1554.1,
+        "utility": 45.2
+      },
+      "t": 270.1,
+      "system_cpu_pct": 16.9
+    },
+    {
+      "private_mb": 2175.0,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 321.6,
+        "host": 87.4,
+        "renderer": 1554.3,
+        "utility": 45.2
+      },
+      "t": 280.0,
+      "system_cpu_pct": 14.2
+    },
+    {
+      "private_mb": 2174.4,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 164.9,
+        "crashpad-handler": 3.9,
+        "gpu-process": 319.3,
+        "host": 87.5,
+        "renderer": 1553.9,
+        "utility": 45.0
+      },
+      "t": 290.0,
+      "system_cpu_pct": 26.4
+    },
+    {
+      "private_mb": 2172.3,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 162.4,
+        "crashpad-handler": 3.9,
+        "gpu-process": 319.3,
+        "host": 87.5,
+        "renderer": 1554.2,
+        "utility": 45.0
+      },
+      "t": 300.1,
+      "system_cpu_pct": 51.1
+    },
+    {
+      "private_mb": 2177.5,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.4,
+        "crashpad-handler": 3.9,
+        "gpu-process": 318.9,
+        "host": 89.6,
+        "renderer": 1554.5,
+        "utility": 45.1
+      },
+      "t": 310.1,
+      "system_cpu_pct": 78.3
+    },
+    {
+      "private_mb": 2211.2,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.7,
+        "crashpad-handler": 3.9,
+        "gpu-process": 315.9,
+        "host": 89.8,
+        "renderer": 1588.8,
+        "utility": 47.1
+      },
+      "t": 320.1,
+      "system_cpu_pct": 85.7
+    },
+    {
+      "private_mb": 2155.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 164.0,
+        "crashpad-handler": 3.9,
+        "gpu-process": 296.8,
+        "host": 87.6,
+        "renderer": 1555.4,
+        "utility": 47.6
+      },
+      "t": 330.2,
+      "system_cpu_pct": 97.7
+    },
+    {
+      "private_mb": 2232.4,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 165.5,
+        "crashpad-handler": 3.9,
+        "gpu-process": 296.8,
+        "host": 87.7,
+        "renderer": 1631.1,
+        "utility": 47.3
+      },
+      "t": 340.1,
+      "system_cpu_pct": 98.5
+    },
+    {
+      "private_mb": 2226.7,
+      "processes": 29,
+      "by_type_mb": {
+        "browser": 163.3,
+        "crashpad-handler": 3.9,
+        "gpu-process": 293.9,
+        "host": 87.6,
+        "renderer": 1631.9,
+        "utility": 46.0
+      },
+      "t": 350.0,
+      "system_cpu_pct": 100.0
+    },
+    {
+      "private_mb": 2211.9,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 164.0,
+        "crashpad-handler": 3.9,
+        "gpu-process": 290.6,
+        "host": 88.3,
+        "renderer": 1618.3,
+        "utility": 46.7
+      },
+      "t": 360.1,
+      "system_cpu_pct": 100.0
+    },
+    {
+      "private_mb": 2177.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.4,
+        "crashpad-handler": 3.9,
+        "gpu-process": 290.7,
+        "host": 85.4,
+        "renderer": 1589.9,
+        "utility": 45.9
+      },
+      "t": 370.1,
+      "system_cpu_pct": 86.0
+    },
+    {
+      "private_mb": 2149.9,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.5,
+        "crashpad-handler": 3.9,
+        "gpu-process": 284.6,
+        "host": 85.7,
+        "renderer": 1568.2,
+        "utility": 46.0
+      },
+      "t": 380.2,
+      "system_cpu_pct": 100.0
+    },
+    {
+      "private_mb": 2150.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.8,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.2,
+        "host": 86.4,
+        "renderer": 1567.7,
+        "utility": 46.0
+      },
+      "t": 390.2,
+      "system_cpu_pct": 100.0
+    },
+    {
+      "private_mb": 2148.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.3,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.2,
+        "host": 86.7,
+        "renderer": 1568.7,
+        "utility": 45.4
+      },
+      "t": 400.0,
+      "system_cpu_pct": 100.0
+    },
+    {
+      "private_mb": 2134.4,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.6,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 87.5,
+        "renderer": 1551.7,
+        "utility": 45.4
+      },
+      "t": 410.1,
+      "system_cpu_pct": 72.0
+    },
+    {
+      "private_mb": 2132.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.1,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 88.2,
+        "renderer": 1551.6,
+        "utility": 45.3
+      },
+      "t": 420.1,
+      "system_cpu_pct": 40.7
+    },
+    {
+      "private_mb": 2133.6,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.1,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 88.9,
+        "renderer": 1552.1,
+        "utility": 45.3
+      },
+      "t": 430.1,
+      "system_cpu_pct": 24.0
+    },
+    {
+      "private_mb": 2133.7,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.1,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 89.0,
+        "renderer": 1552.0,
+        "utility": 45.4
+      },
+      "t": 440.1,
+      "system_cpu_pct": 29.7
+    },
+    {
+      "private_mb": 2136.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.5,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 89.6,
+        "renderer": 1551.8,
+        "utility": 45.2
+      },
+      "t": 450.0,
+      "system_cpu_pct": 9.8
+    },
+    {
+      "private_mb": 2134.0,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.1,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 90.0,
+        "renderer": 1551.6,
+        "utility": 45.2
+      },
+      "t": 460.2,
+      "system_cpu_pct": 13.4
+    },
+    {
+      "private_mb": 2136.8,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.5,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.2,
+        "host": 90.6,
+        "renderer": 1551.6,
+        "utility": 45.1
+      },
+      "t": 470.2,
+      "system_cpu_pct": 23.9
+    },
+    {
+      "private_mb": 2137.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.1,
+        "host": 90.8,
+        "renderer": 1551.6,
+        "utility": 45.3
+      },
+      "t": 480.1,
+      "system_cpu_pct": 7.6
+    },
+    {
+      "private_mb": 2135.5,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.0,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.2,
+        "host": 91.6,
+        "renderer": 1551.6,
+        "utility": 45.3
+      },
+      "t": 490.1,
+      "system_cpu_pct": 15.6
+    },
+    {
+      "private_mb": 2134.8,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.0,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 91.8,
+        "renderer": 1550.7,
+        "utility": 45.3
+      },
+      "t": 500.0,
+      "system_cpu_pct": 19.1
+    },
+    {
+      "private_mb": 2130.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 93.0,
+        "renderer": 1542.4,
+        "utility": 45.3
+      },
+      "t": 510.2,
+      "system_cpu_pct": 17.5
+    },
+    {
+      "private_mb": 2124.7,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.0,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 93.2,
+        "renderer": 1539.1,
+        "utility": 45.3
+      },
+      "t": 520.2,
+      "system_cpu_pct": 10.5
+    },
+    {
+      "private_mb": 2119.5,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 90.7,
+        "renderer": 1534.2,
+        "utility": 45.0
+      },
+      "t": 530.1,
+      "system_cpu_pct": 25.6
+    },
+    {
+      "private_mb": 2119.6,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.2,
+        "host": 90.6,
+        "renderer": 1534.4,
+        "utility": 45.2
+      },
+      "t": 540.1,
+      "system_cpu_pct": 22.4
+    },
+    {
+      "private_mb": 2111.8,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.9,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 91.9,
+        "renderer": 1527.8,
+        "utility": 45.2
+      },
+      "t": 550.0,
+      "system_cpu_pct": 14.6
+    },
+    {
+      "private_mb": 2112.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.9,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 91.8,
+        "renderer": 1528.3,
+        "utility": 45.2
+      },
+      "t": 560.2,
+      "system_cpu_pct": 5.3
+    },
+    {
+      "private_mb": 2115.4,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 92.1,
+        "renderer": 1528.7,
+        "utility": 45.1
+      },
+      "t": 570.1,
+      "system_cpu_pct": 15.8
+    },
+    {
+      "private_mb": 2112.9,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.9,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 92.1,
+        "renderer": 1528.6,
+        "utility": 45.2
+      },
+      "t": 580.1,
+      "system_cpu_pct": 83.9
+    },
+    {
+      "private_mb": 2115.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.3,
+        "host": 92.3,
+        "renderer": 1528.0,
+        "utility": 45.2
+      },
+      "t": 590.1,
+      "system_cpu_pct": 52.9
+    },
+    {
+      "private_mb": 2115.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.4,
+        "crashpad-handler": 3.8,
+        "gpu-process": 282.2,
+        "host": 92.4,
+        "renderer": 1528.3,
+        "utility": 45.0
+      },
+      "t": 600.1,
+      "system_cpu_pct": 40.3
+    },
+    {
+      "private_mb": 2103.8,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 161.2,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.3,
+        "host": 82.4,
+        "renderer": 1528.9,
+        "utility": 45.1
+      },
+      "t": 610.2,
+      "system_cpu_pct": 47.9
+    },
+    {
+      "private_mb": 2143.5,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 163.1,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.3,
+        "host": 82.7,
+        "renderer": 1565.3,
+        "utility": 46.2
+      },
+      "t": 620.2,
+      "system_cpu_pct": 37.4
+    },
+    {
+      "private_mb": 2133.0,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.5,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.3,
+        "host": 83.0,
+        "renderer": 1558.8,
+        "utility": 44.7
+      },
+      "t": 630.1,
+      "system_cpu_pct": 33.3
+    },
+    {
+      "private_mb": 2164.6,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.3,
+        "host": 83.3,
+        "renderer": 1589.8,
+        "utility": 44.7
+      },
+      "t": 640.1,
+      "system_cpu_pct": 34.3
+    },
+    {
+      "private_mb": 2153.6,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.3,
+        "host": 83.6,
+        "renderer": 1578.6,
+        "utility": 44.7
+      },
+      "t": 650.1,
+      "system_cpu_pct": 37.4
+    },
+    {
+      "private_mb": 2192.7,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.6,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.2,
+        "host": 83.9,
+        "renderer": 1615.6,
+        "utility": 46.5
+      },
+      "t": 660.1,
+      "system_cpu_pct": 32.2
+    },
+    {
+      "private_mb": 2162.8,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.4,
+        "crashpad-handler": 3.9,
+        "gpu-process": 282.3,
+        "host": 84.3,
+        "renderer": 1587.3,
+        "utility": 44.7
+      },
+      "t": 670.1,
+      "system_cpu_pct": 34.4
+    },
+    {
+      "private_mb": 2162.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.3,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 84.6,
+        "renderer": 1587.2,
+        "utility": 44.6
+      },
+      "t": 680.0,
+      "system_cpu_pct": 36.2
+    },
+    {
+      "private_mb": 2140.0,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.9,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 84.9,
+        "renderer": 1561.9,
+        "utility": 44.7
+      },
+      "t": 690.0,
+      "system_cpu_pct": 28.5
+    },
+    {
+      "private_mb": 2137.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.3,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.2,
+        "renderer": 1561.7,
+        "utility": 44.5
+      },
+      "t": 700.2,
+      "system_cpu_pct": 33.6
+    },
+    {
+      "private_mb": 2140.0,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.6,
+        "renderer": 1561.6,
+        "utility": 44.5
+      },
+      "t": 710.1,
+      "system_cpu_pct": 26.1
+    },
+    {
+      "private_mb": 2137.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.9,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.8,
+        "renderer": 1558.2,
+        "utility": 44.7
+      },
+      "t": 720.1,
+      "system_cpu_pct": 10.3
+    },
+    {
+      "private_mb": 2137.0,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 86.1,
+        "renderer": 1558.0,
+        "utility": 44.6
+      },
+      "t": 730.0,
+      "system_cpu_pct": 19.1
+    },
+    {
+      "private_mb": 2136.9,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 86.3,
+        "renderer": 1557.8,
+        "utility": 44.6
+      },
+      "t": 740.1,
+      "system_cpu_pct": 47.7
+    },
+    {
+      "private_mb": 2135.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 84.7,
+        "renderer": 1557.8,
+        "utility": 44.6
+      },
+      "t": 750.1,
+      "system_cpu_pct": 35.1
+    },
+    {
+      "private_mb": 2133.4,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.5,
+        "renderer": 1557.5,
+        "utility": 44.6
+      },
+      "t": 760.1,
+      "system_cpu_pct": 26.1
+    },
+    {
+      "private_mb": 2135.8,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.4,
+        "renderer": 1557.5,
+        "utility": 44.6
+      },
+      "t": 770.1,
+      "system_cpu_pct": 32.6
+    },
+    {
+      "private_mb": 2130.7,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.7,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.4,
+        "renderer": 1552.5,
+        "utility": 44.6
+      },
+      "t": 780.1,
+      "system_cpu_pct": 27.1
+    },
+    {
+      "private_mb": 2127.4,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.4,
+        "renderer": 1551.6,
+        "utility": 44.6
+      },
+      "t": 790.1,
+      "system_cpu_pct": 18.2
+    },
+    {
+      "private_mb": 2130.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.4,
+        "renderer": 1551.9,
+        "utility": 44.6
+      },
+      "t": 800.1,
+      "system_cpu_pct": 34.9
+    },
+    {
+      "private_mb": 2129.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.4,
+        "renderer": 1553.4,
+        "utility": 44.5
+      },
+      "t": 810.1,
+      "system_cpu_pct": 20.1
+    },
+    {
+      "private_mb": 2120.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.4,
+        "renderer": 1544.4,
+        "utility": 44.5
+      },
+      "t": 820.1,
+      "system_cpu_pct": 33.5
+    },
+    {
+      "private_mb": 2120.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.4,
+        "renderer": 1544.6,
+        "utility": 44.5
+      },
+      "t": 830.1,
+      "system_cpu_pct": 20.5
+    },
+    {
+      "private_mb": 2122.9,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.4,
+        "renderer": 1544.8,
+        "utility": 44.5
+      },
+      "t": 840.1,
+      "system_cpu_pct": 21.8
+    },
+    {
+      "private_mb": 2120.5,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.4,
+        "renderer": 1544.9,
+        "utility": 44.5
+      },
+      "t": 850.0,
+      "system_cpu_pct": 30.3
+    },
+    {
+      "private_mb": 2123.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.5,
+        "renderer": 1545.0,
+        "utility": 44.5
+      },
+      "t": 860.0,
+      "system_cpu_pct": 22.2
+    },
+    {
+      "private_mb": 2121.1,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.5,
+        "renderer": 1545.4,
+        "utility": 44.5
+      },
+      "t": 870.2,
+      "system_cpu_pct": 26.9
+    },
+    {
+      "private_mb": 2121.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.5,
+        "renderer": 1545.4,
+        "utility": 44.5
+      },
+      "t": 880.2,
+      "system_cpu_pct": 37.6
+    },
+    {
+      "private_mb": 2121.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.5,
+        "renderer": 1545.5,
+        "utility": 44.5
+      },
+      "t": 890.2,
+      "system_cpu_pct": 34.8
+    },
+    {
+      "private_mb": 2123.6,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 162.6,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.5,
+        "renderer": 1545.4,
+        "utility": 44.6
+      },
+      "t": 900.1,
+      "system_cpu_pct": 26.8
+    },
+    {
+      "private_mb": 2121.6,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.5,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.7,
+        "host": 85.5,
+        "renderer": 1545.6,
+        "utility": 44.5
+      },
+      "t": 910.1,
+      "system_cpu_pct": 28.7
+    },
+    {
+      "private_mb": 2121.3,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.2,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.5,
+        "renderer": 1545.6,
+        "utility": 44.5
+      },
+      "t": 920.1,
+      "system_cpu_pct": 29.0
+    },
+    {
+      "private_mb": 2158.2,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.3,
+        "crashpad-handler": 3.8,
+        "gpu-process": 281.8,
+        "host": 85.6,
+        "renderer": 1580.4,
+        "utility": 46.3
+      },
+      "t": 930.2,
+      "system_cpu_pct": 45.6
+    },
+    {
+      "private_mb": 2178.5,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.5,
+        "crashpad-handler": 3.8,
+        "gpu-process": 278.0,
+        "host": 85.6,
+        "renderer": 1605.9,
+        "utility": 44.6
+      },
+      "t": 940.0,
+      "system_cpu_pct": 41.0
+    },
+    {
+      "private_mb": 2174.0,
+      "processes": 28,
+      "by_type_mb": {
+        "browser": 160.3,
+        "crashpad-handler": 3.8,
+        "gpu-process": 278.3,
+        "host": 87.3,
+        "renderer": 1599.9,
+        "utility": 44.5
+      },
+      "t": 950.0,
+      "system_cpu_pct": 18.9
+    }
+  ],
+  "summary": {
+    "avg_mb": 2139.8,
+    "p50_mb": 2137.3,
+    "p95_mb": 2269.9,
+    "max_mb": 2432.6,
+    "avg_processes": 27.8,
+    "end_mb": 2174.0,
+    "end_by_type_mb": {
+      "browser": 160.3,
+      "crashpad-handler": 3.8,
+      "gpu-process": 278.3,
+      "host": 87.3,
+      "renderer": 1599.9,
+      "utility": 44.5
+    },
+    "samples": 95,
+    "system_cpu_avg_pct": 33.5
+  }
+}
