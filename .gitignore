@@ -1,0 +1,13 @@
+# Python (tools/metrics)
+.venv/
+__pycache__/
+.pytest_cache/
+.tmp/
+logs/
+*.jsonl
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
