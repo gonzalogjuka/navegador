@@ -13,13 +13,24 @@ Motor: WebView2 (el Chromium que ya trae Windows) + .NET 8 WPF. Lo nuevo está e
 
 | Innovación | Implementación | Cómo se mide |
 |---|---|---|
-| Hibernación por foco e inactividad | Política pura (`HibernationPolicy`) evaluada cada 5 s. Pestaña de fondo inactiva `SuspendAfterSeconds` → `MemoryUsageTargetLevel=Low` + `TrySuspendAsync`. Inactiva `DiscardAfterMinutes` → se destruye el WebView2 y se guarda URL, título y scroll. Si la ventana pierde el foco `FocusLostSeconds`, se hace lo mismo con todas las de fondo y la activa pasa a memoria baja. No se toca la pestaña que reproduce audio. | Eventos `focus_lost`→`hibernate_done`, `focus_gained`→`tab_active_ready`; spans `suspend_tab`, `discard_tab`, `restore_tab` |
+| Hibernación por foco e inactividad | Política pura (`HibernationPolicy`) evaluada cada 1 s (la memoria se mide cada 5 s). Pestaña de fondo inactiva `SuspendAfterSeconds` → `MemoryUsageTargetLevel=Low` + `TrySuspendAsync`. Inactiva `DiscardAfterMinutes` → se destruye el WebView2 y se guarda URL, título y scroll. Si la ventana pierde el foco `FocusLostSeconds`, se hace lo mismo con todas las de fondo y la activa pasa a memoria baja. No se toca la pestaña que reproduce audio. | Eventos `focus_lost`→`hibernate_done`, `focus_gained`→`tab_active_ready`; spans `suspend_tab`, `discard_tab`, `restore_tab` |
 | Presupuesto de RAM | Cada muestra suma la memoria privada de los procesos de WebView2 del navegador (`GetProcessInfos`) más el proceso propio. Si supera `RamBudgetMb`, se descarta la pestaña de fondo usada hace más tiempo, una por ciclo. | `sample.app_private_mb`, evento `budget_discard` |
 | Un proceso por sitio | Un único `CoreWebView2Environment` compartido con `--process-per-site`: todas las pestañas del mismo sitio comparten renderer. | `sample.app_procs` con N pestañas del mismo sitio |
 | Bloqueo nativo de rastreo y publicidad | Dos capas: prevención de rastreo de Chromium en `Strict` y lista propia de dominios (`blocklist.txt`). Cada dominio se registra como filtro de WebView2, así que el evento sólo salta para peticiones bloqueables y las normales no pasan por código nuestro. | `sample.blocked_total`, contador en la barra de estado |
 
 Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten otras apps (Widgets, Teams). Por eso
 `python -m metrics record --app msedgewebview2` mezcla procesos ajenos; la cifra válida es la que el navegador escribe en su propio log.
+
+### Comprobado (2026-11-07, pruebas ocultas con `--automation`)
+| Qué | Resultado |
+|---|---|
+| Proceso por sitio | 4 pestañas de Wikipedia: **6 procesos y 660 MB** con `--process-per-site` contra **9 procesos y 778 MB** sin el flag (−3 procesos, −118 MB). Con 3 sitios distintos más, 10 contra 12 procesos. |
+| Presupuesto de RAM | Con tope 300 MB y 4 pestañas, bajó de 812 MB a 337 MB descartando 3 (prueba de 0.1.0). |
+| Descartar y despertar | Descartar: ~16 ms. Despertar: 0.5–1.3 s. El scroll vuelve exacto (2000 px → 2000 px). |
+| Sesión liviana | 3 pestañas guardadas: al reabrir carga sólo la activa; las otras 2 quedan descartadas. |
+| Foco | `focus_lost`→`hibernate_done` 2.2–2.7 s con espera configurada de 2 s. |
+| Bloqueo | 2–11 peticiones de rastreo bloqueadas por página en sitios de noticias. |
+| Sólo con tests unitarios | No dormir la pestaña que suena (`HibernationPolicy`): no se probó con audio real para no hacer ruido en la PC. Pantalla completa (F11 / videos): sin probar. |
 
 ## Fases
 
@@ -59,8 +70,8 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 
 ## Ajustes (`%LOCALAPPDATA%\Navegador\settings.json`)
 `RamBudgetMb` (1024), `SuspendAfterSeconds` (60), `DiscardAfterMinutes` (15), `FocusLostSeconds` (10),
-`BlockingEnabled` (true), `SearchUrl` (Google), `AllowSites` (escudo), `BrowserArguments` (`--process-per-site`).
-Se abren con el botón ⚙ y se releen al reiniciar.
+`BlockingEnabled` (true), `SearchUrl` (Google), `AllowSites` (escudo), `BrowserArguments` (`--process-per-site`),
+`HttpsFirst` (true), `BlockNotifications` (true). Se abren desde el menú ⋮ → Ajustes y se releen al reiniciar.
 
 ## Riesgos conocidos
 - **RivaTuner Statistics Server (MSI Afterburner)** inyecta `RTSSHooks64.dll` y tira el proceso principal de WebView2
