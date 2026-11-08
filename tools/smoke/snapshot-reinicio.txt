@@ -1,0 +1,6 @@
+# Segunda parte de snapshot.txt (misma carpeta de datos): la foto y el scroll sobreviven al reinicio.
+shot s3-tras-reinicio
+wait 6000
+shot s4-tras-reinicio-cargada
+js scrollY
+close

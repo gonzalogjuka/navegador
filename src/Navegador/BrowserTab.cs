@@ -44,6 +44,12 @@ public sealed class BrowserTab : INotifyPropertyChanged
     public ulong? CancelledNavigationId { get; set; }
     /// <summary>Última navegación iniciada; los avisos de navegaciones anteriores (interrumpidas) se ignoran.</summary>
     public ulong? CurrentNavigationId { get; set; }
+    /// <summary>Archivo de snapshot (nombre dentro de la carpeta snapshots) o null.</summary>
+    public string? SnapshotFile { get; set; }
+    /// <summary>Despertando con snapshot: el WebView queda oculto hasta que la página real cargó y recuperó el scroll.</summary>
+    public bool RevealPending { get; set; }
+    /// <summary>Último scroll conocido de la página actual (se guarda en la sesión). SavedScroll es el que falta reaplicar.</summary>
+    public string? LastScroll { get; set; }
 
     public string Title { get => _title; set => Set(ref _title, string.IsNullOrWhiteSpace(value) ? Url : value); }
     public string? FaviconUri { get => _faviconUri; set => Set(ref _faviconUri, string.IsNullOrEmpty(value) ? null : value); }

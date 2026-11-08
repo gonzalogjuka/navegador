@@ -94,8 +94,13 @@ public partial class MainWindow : Window
         {
             // Todas descartadas: arrancar no carga páginas que no vas a mirar.
             foreach (var t in session.Tabs)
-                AddTab(new BrowserTab { Url = t.Url, Title = t.Title, State = TabState.Discarded });
+                AddTab(new BrowserTab
+                {
+                    Url = t.Url, Title = t.Title, State = TabState.Discarded, LastScroll = t.Scroll,
+                    SnapshotFile = SnapshotFiles.IsValidName(t.Snapshot) && File.Exists(Path.Combine(_app.Paths.Snapshots, t.Snapshot!)) ? t.Snapshot : null,
+                });
         }
+        if (!_isPrivate) DeleteOrphanSnapshots();
 
         if (_startUrl is not null)
             await ActivateAsync(await NewTabAsync(UrlInput.Resolve(_startUrl, _settings.SearchUrl)));
@@ -126,7 +131,7 @@ public partial class MainWindow : Window
     private void SaveSession()
     {
         if (_isPrivate || _tabs.Count == 0) return;
-        var tabs = _tabs.Select(t => new SavedTab(t.Url, t.Title)).ToList();
+        var tabs = _tabs.Select(t => new SavedTab(t.Url, t.Title, t.LastScroll, t.SnapshotFile)).ToList();
         var active = _active is null ? 0 : Math.Max(0, _tabs.IndexOf(_active));
         try { SessionStore.Save(_app.Paths.Session, new SavedSession(tabs, active)); }
         catch (IOException ex) { _log.Event("error", ("where", "save_session"), ("message", ex.Message)); }
@@ -315,6 +320,7 @@ public partial class MainWindow : Window
             }
         }
         tab.CurrentNavigationId = e.NavigationId;
+        if (tab.RestoreSpan is null) tab.LastScroll = null; // página nueva: el scroll anterior ya no corresponde
         tab.TopHost = BrowserTab.HostOf(uri);
         tab.BlockedOnPage = 0;
         tab.IsLoading = true;
@@ -358,6 +364,8 @@ public partial class MainWindow : Window
             tab.RestoreSpan = null;
             span.End(e.IsSuccess);
         }
+        if (tab.RevealPending) _ = RevealAfterRestoreAsync(tab);
+        if (e.IsSuccess && tab == _active && tab.InternalPage is null) _ = SnapshotSoonAsync(tab, e.NavigationId);
         if (e.IsSuccess && tab.InternalPage is null && tab.Core is { } done)
             tab.Url = done.Source; // la dirección real (con redirecciones), no la que se escribió
         if (e.IsSuccess && !_isPrivate && tab.InternalPage is null)
@@ -443,6 +451,8 @@ public partial class MainWindow : Window
                 prev.WebView!.Visibility = Visibility.Collapsed;
             }
             CloseFind();
+            prev.RevealPending = false; // si estaba despertando, al volver se muestra directo
+            HideSnapshot();
         }
 
         _active = tab;
@@ -451,10 +461,15 @@ public partial class MainWindow : Window
 
         if (tab.State == TabState.Discarded)
         {
-            Placeholder.Text = $"Despertando {tab.Title}…";
-            Placeholder.Visibility = Visibility.Visible;
-            tab.RestoreSpan = _log.StartSpan("restore_tab", ("tab_id", tab.Id), ("host", BrowserTab.HostOf(tab.Url)));
+            tab.RestoreSpan = _log.StartSpan("restore_tab", ("tab_id", tab.Id), ("host", BrowserTab.HostOf(tab.Url)),
+                ("snapshot", tab.SnapshotFile is not null));
+            if (!ShowSnapshot(tab))
+            {
+                Placeholder.Text = $"Despertando {tab.Title}…";
+                Placeholder.Visibility = Visibility.Visible;
+            }
             var url = tab.Url;
+            tab.SavedScroll = tab.LastScroll; // se reaplica al terminar de cargar
             await EnsureWebViewAsync(tab);
             tab.State = TabState.Live;
             Navigate(tab, url);
@@ -470,11 +485,12 @@ public partial class MainWindow : Window
         Placeholder.Visibility = Visibility.Collapsed;
         if (tab.WebView is { } wv)
         {
-            wv.Visibility = Visibility.Visible;
+            if (!tab.RevealPending) wv.Visibility = Visibility.Visible;
             if (tab.Url != InternalPages.NewTab) wv.Focus();
         }
         if (tab.Url == InternalPages.NewTab && !Address.IsKeyboardFocusWithin) FocusAddress();
         Title = $"{tab.Title} — {WindowSuffix}";
+        if (tab.Url != InternalPages.NewTab) Address.Text = tab.Url; // al cambiar de pestaña, aunque la barra tenga el foco
         RefreshChrome();
         RefreshZoom();
         BringIntoView(tab);
@@ -487,7 +503,7 @@ public partial class MainWindow : Window
             var json = await core.ExecuteScriptAsync("JSON.stringify([Math.round(scrollX), Math.round(scrollY)])");
             // ExecuteScriptAsync devuelve el string serializado otra vez como JSON.
             var value = System.Text.Json.JsonSerializer.Deserialize<string>(json);
-            tab.SavedScroll = value is "[0,0]" ? null : value;
+            tab.LastScroll = value is "[0,0]" ? null : value;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Text.Json.JsonException or System.Runtime.InteropServices.COMException)
         {
@@ -502,6 +518,7 @@ public partial class MainWindow : Window
         if (!InternalPages.IsInternal(tab.Url)) _closed.Push(tab.Url);
         _tabs.RemoveAt(index);
         DisposeWebView(tab);
+        DeleteSnapshot(tab);
         _log.Event("close_tab", ("tab_id", tab.Id));
         if (_tabs.Count == 0)
         {
@@ -547,6 +564,7 @@ public partial class MainWindow : Window
         var sampled = _ticks % SampleEveryTicks == 0;
         if (sampled) Sample();
         if (_ticks % SaveEveryTicks == 0) SaveSession();
+        if (_ticks % SnapshotEveryTicks == 0 && _active is { InternalPage: null, IsLoading: false } shown) _ = CaptureSnapshotAsync(shown);
         if (_applying) return;
 
         _applying = true;
@@ -893,6 +911,9 @@ public partial class MainWindow : Window
         var core = _active?.Core ?? _tabs.Select(t => t.Core).FirstOrDefault(c => c is not null);
         if (core is not null) await core.Profile.ClearBrowsingDataAsync();
         _app.Data.ClearHistory();
+        foreach (var t in _tabs) t.SnapshotFile = null;
+        try { if (Directory.Exists(_app.Paths.Snapshots)) Directory.Delete(_app.Paths.Snapshots, recursive: true); }
+        catch (IOException) { }
         _app.SaveData();
         _log.Event("browsing_data_cleared");
         foreach (var t in _tabs.Where(t => t.InternalPage is not null && t.Core is not null)) Navigate(t, t.Url);

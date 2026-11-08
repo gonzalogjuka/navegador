@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-11-08
+- **Snapshots**: foto JPEG de la pestaña activa (2 s después de cargar y cada 20 s). Al despertar una pestaña descartada se ve la foto al instante con "Despertando…" y la página real la reemplaza cuando cargó y recuperó el scroll (máximo 8 s de espera). Sobrevive a reinicios.
+- El scroll se guarda junto con cada snapshot y en la sesión: también vuelve después de cerrar y abrir el navegador.
+- Privacidad: la ventana privada no escribe snapshots; "Borrar datos" los elimina; se borran al cerrar la pestaña y al arrancar si quedaron huérfanos; nombres aleatorios validados.
+- Al cambiar de pestaña la barra de direcciones muestra la dirección aunque tenga el foco.
+
 ## 0.2.1 — 2026-11-07
 - Las pruebas automáticas (`--automation`) ya no molestan: ventanas fuera de pantalla, sin barra de tareas ni foco, menús dibujados sin abrirse (antes Windows los traía al borde visible). Verificado: 163 muestras, 0 veces con el foco, 0 ventanas visibles.
 - `--automation` cierra la app siempre al terminar (archivo inexistente, error o sin `close`), para que nunca quede un navegador invisible abierto.

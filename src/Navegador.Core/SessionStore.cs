@@ -2,7 +2,9 @@ using System.Text.Json;
 
 namespace Navegador.Core;
 
-public sealed record SavedTab(string Url, string Title);
+/// <param name="Scroll">"[x,y]" guardado al dejar la pestaña; se reaplica al despertarla.</param>
+/// <param name="Snapshot">Nombre del archivo de snapshot (carpeta snapshots), si hay.</param>
+public sealed record SavedTab(string Url, string Title, string? Scroll = null, string? Snapshot = null);
 
 public sealed record SavedSession(List<SavedTab> Tabs, int ActiveIndex);
 

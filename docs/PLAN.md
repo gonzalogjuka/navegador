@@ -26,7 +26,8 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 |---|---|
 | Proceso por sitio | 4 pestañas de Wikipedia: **6 procesos y 660 MB** con `--process-per-site` contra **9 procesos y 778 MB** sin el flag (−3 procesos, −118 MB). Con 3 sitios distintos más, 10 contra 12 procesos. |
 | Presupuesto de RAM | Con tope 300 MB y 4 pestañas, bajó de 812 MB a 337 MB descartando 3 (prueba de 0.1.0). |
-| Descartar y despertar | Descartar: ~16 ms. Despertar: 0.5–1.3 s. El scroll vuelve exacto (2000 px → 2000 px). |
+| Descartar y despertar | Descartar: ~16 ms. Despertar: 0.5–1.7 s. El scroll vuelve exacto (2000 px → 2000 px), también después de reiniciar el navegador. |
+| Snapshot (0.3.0) | Foto JPEG de la pestaña activa (2 s después de cargar y cada 20 s, junto con el scroll): 30–66 ms en caliente, ~150 KB. Al despertar se ve la foto al instante con "Despertando…" y la página real la reemplaza sin salto. Tras reiniciar, la foto aparece con el navegador en 151 MB. "Borrar datos" elimina la carpeta; la ventana privada no escribe ninguna. |
 | Sesión liviana | 3 pestañas guardadas: al reabrir carga sólo la activa; las otras 2 quedan descartadas. |
 | Foco | `focus_lost`→`hibernate_done` 2.2–2.7 s con espera configurada de 2 s. |
 | Bloqueo | 2–11 peticiones de rastreo bloqueadas por página en sitios de noticias. |
@@ -59,6 +60,7 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 | Borrar datos | Menú ⋮ o Ctrl+Shift+Supr: cookies, caché, almacenamiento de sitios e historial. |
 | Ventana privada | Perfil InPrivate de WebView2: sin historial, cookies ni sesión al cerrar. |
 | Páginas propias | Nueva pestaña e historial sin JavaScript, con CSP `default-src 'none'`; títulos y URLs de sitios siempre escapados; sólo se enlaza http/https. |
+| Snapshots | Imágenes de páginas en `snapshots\` con nombres aleatorios (no revelan la URL); `session.json` sólo acepta nombres generados por la app. Se borran al cerrar la pestaña, con "Borrar datos" y al arrancar si quedaron huérfanos. La ventana privada nunca los escribe. |
 
 Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin interceptar todas las peticiones, lo que cuesta rendimiento).
 

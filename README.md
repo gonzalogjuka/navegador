@@ -4,7 +4,7 @@ Navegador liviano para Windows que se achica solo cuando no lo usás. WebView2 (
 Plan, fases y criterios: [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Qué tiene
-- **Pestañas que se duermen**: una pestaña de fondo pasa a memoria baja y se suspende al minuto; a los 15 min se descarta (queda URL, título y scroll). Al perder el foco (juego, otra app) se duermen todas las de fondo a los 10 s. Nunca se toca la activa ni la que suena.
+- **Pestañas que se duermen**: una pestaña de fondo pasa a memoria baja y se suspende al minuto; a los 15 min se descarta (queda URL, título, scroll y un **snapshot**: al volver ves la foto al instante mientras la página real carga). Al perder el foco (juego, otra app) se duermen todas las de fondo a los 10 s. Nunca se toca la activa ni la que suena.
 - **Presupuesto de RAM** (1 GB por defecto): si el navegador entero lo pasa, descarta la pestaña de fondo usada hace más tiempo.
 - **Un proceso por sitio** (`--process-per-site`): pestañas del mismo sitio comparten renderer.
 - **Bloqueo de rastreo y publicidad** incluido: prevención de rastreo de Chromium en *Strict* + `blocklist.txt`. Las peticiones normales no pasan por código propio. El escudo de la barra de estado permite un sitio con un clic.

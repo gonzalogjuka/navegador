@@ -206,6 +206,14 @@
         <!-- Contenido: un WebView2 por pestaña viva; sólo el activo es visible -->
         <Grid x:Name="Host" Grid.Row="3" Background="White">
             <TextBlock x:Name="Placeholder" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#5F6368" FontSize="16" Visibility="Collapsed"/>
+            <!-- Snapshot: foto de la pestaña dormida mientras despierta -->
+            <Grid x:Name="SnapshotOverlay" Visibility="Collapsed">
+                <Image x:Name="SnapshotImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0" Background="#CC202124"
+                        CornerRadius="12" Padding="12,4">
+                    <TextBlock Text="Despertando…" Foreground="#E8EAED" FontSize="12"/>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- Estado: lo que hace liviano al navegador, a la vista -->

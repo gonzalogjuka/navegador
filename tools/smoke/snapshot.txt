@@ -1,0 +1,18 @@
+# Prueba de humo del snapshot (oculta). Correr dos veces con la MISMA carpeta de datos:
+#   dist\Navegador.exe --data-dir <tmp> --automation tools\smoke\snapshot.txt
+#   dist\Navegador.exe --data-dir <tmp> --automation tools\smoke\snapshot-reinicio.txt
+# Esperado: s1 muestra la foto con "Despertando…", s2 la página real igual; scrollY 2000 en ambas corridas.
+go https://es.wikipedia.org/wiki/Historia_de_Argentina
+wait 5000
+js window.scrollTo(0, 2000); scrollY
+wait 21000
+newtab
+wait 1000
+sleep 0
+wait 500
+tab 0
+shot s1-despertando
+wait 6000
+shot s2-despierta
+js scrollY
+close
