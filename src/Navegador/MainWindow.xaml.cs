@@ -27,6 +27,10 @@ public partial class MainWindow : Window
     private readonly bool _isPrivate;
     private readonly ObservableCollection<BrowserTab> _tabs = [];
     private readonly Stack<string> _closed = new();
+    /// <summary>Hosts sin HTTPS: compartidos por las ventanas normales; cada ventana privada tiene los suyos, en memoria.</summary>
+    private readonly HashSet<string> _httpExempt;
+    /// <summary>Sitios con el bloqueo apagado en esta ventana privada (en memoria; la lista de los ajustes no se lee ni se escribe).</summary>
+    private readonly HashSet<string> _privateAllowed = new(StringComparer.OrdinalIgnoreCase);
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private CoreWebView2Environment? _env;
@@ -52,9 +56,10 @@ public partial class MainWindow : Window
         _app = app;
         _settings = app.Settings;
         _blockList = app.BlockList;
-        _log = app.Log;
+        _log = isPrivate ? EventLog.Off : app.Log; // la ventana privada no deja actividad en el log
         _startUrl = startUrl;
         _isPrivate = isPrivate;
+        _httpExempt = isPrivate ? new(StringComparer.OrdinalIgnoreCase) : app.HttpExempt;
         InitializeComponent();
         TabList.ItemsSource = _tabs;
         if (isPrivate)
@@ -125,6 +130,14 @@ public partial class MainWindow : Window
         _tick.Stop();
         SaveSession();
         _log.Event("shutdown", ("tabs", _tabs.Count), ("blocked_total", _blockedTotal), ("private", _isPrivate));
+        if (_isPrivate && !Application.Current.Windows.OfType<MainWindow>().Any(w => w != this && w._isPrivate))
+        {
+            // Última ventana privada: WebView2 borra la carpeta del perfil cuando termina su proceso; la próxima ventana
+            // privada usa un perfil nuevo. Si el borrado no llega (cierre forzado), lo hace el próximo arranque.
+            try { _tabs.Select(t => t.Core).FirstOrDefault(c => c is not null)?.Profile.Delete(); }
+            catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+            _app.RetirePrivateProfile();
+        }
         foreach (var t in _tabs) t.WebView?.Dispose();
     }
 
@@ -233,6 +246,7 @@ public partial class MainWindow : Window
         {
             var options = _env.CreateCoreWebView2ControllerOptions();
             options.IsInPrivateModeEnabled = true;
+            options.ProfileName = _app.PrivateProfileName;
             await wv.EnsureCoreWebView2Async(_env, options);
         }
         else
@@ -296,13 +310,13 @@ public partial class MainWindow : Window
         else
         {
             tab.InternalPage = null;
-            if (_settings.HttpsFirst && HttpsUpgrade.Upgrade(uri, _app.HttpExempt) is { } https)
+            if (_settings.HttpsFirst && HttpsUpgrade.Upgrade(uri, _httpExempt) is { } https)
             {
                 var host = BrowserTab.HostOf(uri)!;
                 if (tab.UpgradeHost == host)
                 {
                     // Pasamos a https y el sitio nos redirigió de vuelta a http: no quiere https.
-                    _app.HttpExempt.Add(host);
+                    _httpExempt.Add(host);
                     tab.UpgradeHost = null;
                     _log.Event("https_fallback", ("host", host), ("reason", "redirect"));
                 }
@@ -347,7 +361,7 @@ public partial class MainWindow : Window
             tab.UpgradeFallback = null;
             if (!e.IsSuccess && fallback is not null && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
             {
-                _app.HttpExempt.Add(upgraded);
+                _httpExempt.Add(upgraded);
                 _log.Event("https_fallback", ("host", upgraded), ("reason", e.WebErrorStatus.ToString()));
                 tab.Core?.Navigate(fallback);
                 return;
@@ -407,7 +421,7 @@ public partial class MainWindow : Window
     {
         // Sólo llegan acá las peticiones que coinciden con algún filtro de la lista.
         var host = BrowserTab.HostOf(e.Request.Uri);
-        if (host is null || !_blockList.IsBlocked(host) || _settings.IsAllowed(tab.TopHost)) return;
+        if (host is null || !_blockList.IsBlocked(host) || IsSiteAllowed(tab.TopHost)) return;
         if (tab.TopHost is { } top && (host == top || host.EndsWith("." + top) || top.EndsWith("." + host))) return;
         e.Response = _env!.CreateWebResourceResponse(null, 403, "Blocked", "");
         tab.BlockedOnPage++;
@@ -423,9 +437,13 @@ public partial class MainWindow : Window
         switch (url)
         {
             case InternalPages.NewTab:
-                tab.InternalPage = url;
+            case InternalPages.History when _isPrivate: // el historial es de la ventana normal
+                tab.Url = InternalPages.NewTab;
+                tab.InternalPage = InternalPages.NewTab;
                 tab.Title = "Nueva pestaña";
-                core.NavigateToString(InternalPages.BuildNewTab(_app.Data, _settings.SearchUrl, _isPrivate));
+                core.NavigateToString(_isPrivate
+                    ? InternalPages.BuildPrivateNewTab(_settings.SearchUrl)
+                    : InternalPages.BuildNewTab(_app.Data, _settings.SearchUrl));
                 return;
             case InternalPages.History:
                 tab.InternalPage = url;
@@ -735,10 +753,12 @@ public partial class MainWindow : Window
             LockIcon.ToolTip = null;
         }
 
-        var bookmarked = url is not null && _app.Data.IsBookmarked(url);
+        // La ventana privada no ve ni toca los favoritos.
+        StarButton.Visibility = _isPrivate ? Visibility.Collapsed : Visibility.Visible;
+        var bookmarked = !_isPrivate && url is not null && _app.Data.IsBookmarked(url);
         StarButton.Content = bookmarked ? "\uE735" : "\uE734";
         StarButton.Foreground = bookmarked ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(0xE8, 0xEA, 0xED));
-        StarButton.IsEnabled = url is not null && BrowserData.IsRecordable(url);
+        StarButton.IsEnabled = !_isPrivate && url is not null && BrowserData.IsRecordable(url);
         RefreshShield();
     }
 
@@ -756,7 +776,7 @@ public partial class MainWindow : Window
     {
         if (!_settings.BlockingEnabled) { ShieldText.Text = "Bloqueo desactivado"; return; }
         var host = _active?.TopHost;
-        ShieldText.Text = _settings.IsAllowed(host)
+        ShieldText.Text = IsSiteAllowed(host)
             ? $"\U0001F6E1 Permitido en {host}  ·  {_blockedTotal} bloqueados en total"
             : $"\U0001F6E1 {_active?.BlockedOnPage ?? 0} bloqueados en este sitio  ·  {_blockedTotal} en total";
     }
@@ -895,7 +915,7 @@ public partial class MainWindow : Window
 
     private void ToggleBookmark()
     {
-        if (_active is not { } tab || !BrowserData.IsRecordable(tab.Url)) return;
+        if (_isPrivate || _active is not { } tab || !BrowserData.IsRecordable(tab.Url)) return;
         var added = _app.Data.ToggleBookmark(tab.Url, tab.Title);
         _app.SaveData();
         _log.Event(added ? "bookmark_added" : "bookmark_removed");
@@ -940,8 +960,8 @@ public partial class MainWindow : Window
         else if (ctrl && shift && key == Key.N) _app.OpenWindow(null, isPrivate: true);
         else if (ctrl && key == Key.W && _active is { } current) action = () => CloseTabAsync(current);
         else if ((ctrl && key == Key.L) || (alt && key == Key.D) || key == Key.F6) FocusAddress();
-        else if (ctrl && key == Key.D && !shift) ToggleBookmark();
-        else if (ctrl && key == Key.H) action = () => OpenOrActivateInternalAsync(InternalPages.History);
+        else if (ctrl && key == Key.D && !shift && !_isPrivate) ToggleBookmark();
+        else if (ctrl && key == Key.H && !_isPrivate) action = () => OpenOrActivateInternalAsync(InternalPages.History);
         else if (ctrl && key == Key.J) core?.OpenDefaultDownloadDialog();
         else if (ctrl && key == Key.F) OpenFind();
         else if (ctrl && key == Key.P) core?.ShowPrintUI();
@@ -1075,12 +1095,24 @@ public partial class MainWindow : Window
     private void Shield_Click(object sender, RoutedEventArgs e)
     {
         if (_active?.TopHost is not { } host || !_settings.BlockingEnabled) return;
-        var allowed = _settings.ToggleAllowed(host);
-        _settings.Save(_app.Paths.Settings);
+        bool allowed;
+        if (_isPrivate)
+        {
+            allowed = !_privateAllowed.Remove(host);
+            if (allowed) _privateAllowed.Add(host);
+        }
+        else
+        {
+            allowed = _settings.ToggleAllowed(host);
+            _settings.Save(_app.Paths.Settings);
+        }
         _log.Event(allowed ? "site_allowed" : "site_blocked", ("host", host));
         _active.Core?.Reload();
         RefreshShield();
     }
+
+    private bool IsSiteAllowed(string? host) =>
+        _isPrivate ? host is not null && _privateAllowed.Contains(host) : _settings.IsAllowed(host);
 
     private void Menu_Click(object sender, RoutedEventArgs e)
     {
@@ -1098,19 +1130,22 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Nueva ventana privada", "Ctrl+Shift+N", () => _app.OpenWindow(null, isPrivate: true)));
         menu.Items.Add(new Separator());
 
-        var favorites = new MenuItem { Header = "Favoritos" };
-        var url = _active?.Url;
-        var canBookmark = url is not null && BrowserData.IsRecordable(url);
-        favorites.Items.Add(Item(url is not null && _app.Data.IsBookmarked(url) ? "Quitar esta página" : "Agregar esta página",
-            "Ctrl+D", ToggleBookmark, canBookmark));
-        if (_app.Data.Bookmarks.Count > 0) favorites.Items.Add(new Separator());
-        foreach (var b in _app.Data.Bookmarks)
+        if (!_isPrivate) // favoritos e historial son de la ventana normal
         {
-            var target = b.Url;
-            favorites.Items.Add(Item(b.Title.Length > 60 ? b.Title[..60] + "…" : b.Title, null, () => { if (_active is { } t) Navigate(t, target); }));
+            var favorites = new MenuItem { Header = "Favoritos" };
+            var url = _active?.Url;
+            var canBookmark = url is not null && BrowserData.IsRecordable(url);
+            favorites.Items.Add(Item(url is not null && _app.Data.IsBookmarked(url) ? "Quitar esta página" : "Agregar esta página",
+                "Ctrl+D", ToggleBookmark, canBookmark));
+            if (_app.Data.Bookmarks.Count > 0) favorites.Items.Add(new Separator());
+            foreach (var b in _app.Data.Bookmarks)
+            {
+                var target = b.Url;
+                favorites.Items.Add(Item(b.Title.Length > 60 ? b.Title[..60] + "…" : b.Title, null, () => { if (_active is { } t) Navigate(t, target); }));
+            }
+            menu.Items.Add(favorites);
+            menu.Items.Add(Item("Historial", "Ctrl+H", () => _ = OpenOrActivateInternalAsync(InternalPages.History)));
         }
-        menu.Items.Add(favorites);
-        menu.Items.Add(Item("Historial", "Ctrl+H", () => _ = OpenOrActivateInternalAsync(InternalPages.History)));
         menu.Items.Add(Item("Descargas", "Ctrl+J", () => core?.OpenDefaultDownloadDialog(), core is not null));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Acercar", "Ctrl++", () => Zoom(+1), core is not null));

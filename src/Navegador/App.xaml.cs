@@ -25,7 +25,10 @@ public partial class App : Application
             else url ??= e.Args[i];
         }
 
-        _log = new EventLog(Path.Combine(paths.Logs, $"session-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl"));
+        // Arrancar directo en privada (--private) no deja log: ni siquiera el archivo de la sesión.
+        _log = isPrivate && automation is null
+            ? EventLog.Off
+            : new EventLog(Path.Combine(paths.Logs, $"session-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl"));
         var settings = Settings.LoadOrCreate(paths.Settings);
         var blockFile = Path.Combine(AppContext.BaseDirectory, "blocklist.txt");
         var blockList = File.Exists(blockFile) ? BlockList.Parse(File.ReadAllText(blockFile)) : new BlockList([]);
@@ -35,6 +38,7 @@ public partial class App : Application
             ("https_first", settings.HttpsFirst), ("block_notifications", settings.BlockNotifications));
 
         _services = new AppServices(paths, settings, blockList, _log, BrowserData.Load(paths.Data)) { AutomationScript = automation };
+        _services.DeletePrivateProfiles();
         _services.OpenWindow(url, isPrivate);
     }
 
@@ -48,7 +52,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _services?.SaveData();
+        if (_services?.NormalWindowOpened == true) _services.SaveData();
         _log?.Event("record_stop");
         _log?.Dispose();
         base.OnExit(e);

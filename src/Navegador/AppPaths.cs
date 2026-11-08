@@ -13,6 +13,21 @@ public sealed record AppPaths(string Root)
     public string Snapshots => Path.Combine(Root, "snapshots");
     public string Logs => Path.Combine(Root, "logs");
 
+    /// <summary>
+    /// Prefijo de los perfiles de WebView2 de las ventanas privadas. Sólo se usan en modo InPrivate, así que no heredan
+    /// nada del perfil normal; cada tanda de ventanas privadas usa uno nuevo (ver AppServices.PrivateProfileName).
+    /// </summary>
+    public const string PrivateProfilePrefix = "Privada-";
+
+    /// <summary>Carpetas de esos perfiles: WebView2 los crea en EBWebView\WV2Profile_&lt;nombre en minúsculas&gt;.</summary>
+    public IEnumerable<string> PrivateProfileDirs()
+    {
+        var root = Path.Combine(WebViewData, "EBWebView");
+        return Directory.Exists(root)
+            ? Directory.EnumerateDirectories(root, "WV2Profile_" + PrivateProfilePrefix.ToLowerInvariant() + "*")
+            : [];
+    }
+
     public static AppPaths Default() =>
         new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Navegador"));
 }

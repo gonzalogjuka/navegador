@@ -102,7 +102,7 @@ public class InternalPagesTests
         d.ToggleBookmark("https://ok.com/", "\"><b>x</b>");
         d.Bookmarks.Add(new Bookmark("javascript:alert(1)", "malo")); // p. ej. data.json editado a mano
 
-        var html = InternalPages.BuildNewTab(d, "https://www.google.com/search?q=", isPrivate: false)
+        var html = InternalPages.BuildNewTab(d, "https://www.google.com/search?q=")
                    + InternalPages.BuildHistory(d);
 
         Assert.DoesNotContain("<script", html);
@@ -115,18 +115,9 @@ public class InternalPagesTests
     [Fact]
     public void Search_form_targets_engine_with_its_query_field()
     {
-        var html = InternalPages.BuildNewTab(new BrowserData(), "https://duckduckgo.com/?kp=-2&q=", isPrivate: false);
+        var html = InternalPages.BuildNewTab(new BrowserData(), "https://duckduckgo.com/?kp=-2&q=");
         Assert.Contains("action=\"https://duckduckgo.com/\"", html);
         Assert.Contains("<input type=\"hidden\" name=\"kp\" value=\"-2\">", html);
         Assert.Contains("<input name=\"q\"", html);
-    }
-
-    [Fact]
-    public void Private_new_tab_does_not_show_history()
-    {
-        var d = new BrowserData();
-        d.AddVisit("https://secreto.com/", "Secreto", DateTime.UtcNow);
-        Assert.DoesNotContain("secreto.com", InternalPages.BuildNewTab(d, "https://s/?q=", isPrivate: true));
-        Assert.Contains("secreto.com", InternalPages.BuildNewTab(d, "https://s/?q=", isPrivate: false));
     }
 }

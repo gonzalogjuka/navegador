@@ -1,0 +1,47 @@
+# Prueba de humo de la ventana privada (oculta): no trae nada de la ventana normal y no deja actividad.
+#   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\privada.txt
+# Esperado en el log: zoom 125 en la normal y 100 en la privada; cookie "" y localStorage null en la privada;
+# la segunda ventana privada (después de cerrar la primera, que manda a borrar su perfil) navega: "https://example.com/ cookie=".
+# Fuera de automation_step/automation_js (que son de la prueba) no puede haber ningún evento de las ventanas privadas:
+# navigation_completed sólo de las pestañas 1 y 2. Al terminar: data.json sin visitas de la privada y ninguna carpeta
+# WebView2\EBWebView\WV2Profile_privada-*.
+# Capturas: p1 (nueva pestaña privada sin favoritos ni recientes), p2 (menú sin Favoritos ni Historial),
+# p3 (about:history en privada = nueva pestaña privada), p4 (example.com sin zoom ni estrella).
+go https://example.com
+wait 4000
+js document.cookie = "normal=1; max-age=3600"; localStorage.setItem("normal", "1"); document.cookie
+bookmark
+zoom +
+zoom +
+wait 500
+js Math.round(window.devicePixelRatio * 100)
+newtab http://neverssl.com
+wait 6000
+private
+wait 1500
+shot p1-private-newtab
+js document.body.innerText
+menu
+wait 800
+shot p2-private-menu
+closemenus
+history
+wait 1500
+shot p3-private-history
+go https://example.com
+wait 4000
+js document.cookie
+js localStorage.getItem("normal")
+js Math.round(window.devicePixelRatio * 100)
+shot p4-private-example
+close
+main
+wait 500
+private
+go https://example.com
+wait 4000
+js location.href + " cookie=" + document.cookie
+close
+main
+wait 500
+close

@@ -33,11 +33,11 @@ public static class InternalPages
         </style></head><body><main>
         """;
 
-    public static string BuildNewTab(BrowserData data, string searchUrl, bool isPrivate)
+    public static string BuildNewTab(BrowserData data, string searchUrl)
     {
         var sb = new StringBuilder();
         sb.AppendFormat(Head, "Nueva pestaña");
-        sb.Append(isPrivate ? "<h1>Ventana privada</h1><p class=\"muted\">No se guarda historial, cookies ni sesión al cerrar.</p>" : "<h1>Navegador</h1>");
+        sb.Append("<h1>Navegador</h1>");
         AppendSearch(sb, searchUrl);
 
         if (data.Bookmarks.Count > 0)
@@ -49,15 +49,22 @@ public static class InternalPages
             sb.Append("</div>");
         }
 
-        if (!isPrivate)
+        var recent = data.Recent(8).ToList();
+        if (recent.Count > 0)
         {
-            var recent = data.Recent(8).ToList();
-            if (recent.Count > 0)
-            {
-                sb.Append("<h2>Recientes</h2>");
-                foreach (var h in recent) AppendRow(sb, h, h.LastVisitUtc.ToLocalTime().ToString("HH:mm"));
-            }
+            sb.Append("<h2>Recientes</h2>");
+            foreach (var h in recent) AppendRow(sb, h, h.LastVisitUtc.ToLocalTime().ToString("HH:mm"));
         }
+        return sb.Append("</main></body></html>").ToString();
+    }
+
+    /// <summary>Nueva pestaña de la ventana privada: no recibe datos del perfil normal, así que no puede mostrar ninguno.</summary>
+    public static string BuildPrivateNewTab(string searchUrl)
+    {
+        var sb = new StringBuilder();
+        sb.AppendFormat(Head, "Nueva pestaña");
+        sb.Append("<h1>Ventana privada</h1><p class=\"muted\">No trae nada de la ventana normal (favoritos, historial, cookies, sesiones, permisos, zoom) y no deja nada al cerrar.</p>");
+        AppendSearch(sb, searchUrl);
         return sb.Append("</main></body></html>").ToString();
     }
 

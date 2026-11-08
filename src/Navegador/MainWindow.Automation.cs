@@ -69,7 +69,7 @@ public partial class MainWindow
             case "tab": await ActivateAsync(_tabs[int.Parse(arg)]); break;
             case "js":
                 var result = await _active!.Core!.ExecuteScriptAsync(arg);
-                _log.Event("automation_js", ("result", result));
+                _app.Log.Event("automation_js", ("result", result)); // el log de la ventana privada no escribe
                 break;
             case "cleardata": await ClearBrowsingDataAsync(confirm: false); break;
             case "sleep":

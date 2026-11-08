@@ -58,7 +58,7 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 | Rastreo | Prevención Strict + lista de dominios (ya en 0.1.0). |
 | Indicador de conexión | Candado en https, advertencia naranja en http. |
 | Borrar datos | Menú ⋮ o Ctrl+Shift+Supr: cookies, caché, almacenamiento de sitios e historial. |
-| Ventana privada | Perfil InPrivate de WebView2: sin historial, cookies ni sesión al cerrar. |
+| Ventana privada | Perfil propio de WebView2 (`Privada-<aleatorio>`) siempre en modo InPrivate: no hereda nada del perfil normal (cookies, almacenamiento, zoom por sitio, permisos). No ve favoritos ni historial; HTTPS primero y "permitir sitio" en memoria de esa ventana. No escribe log, historial, sesión, snapshots, ajustes ni `data.json`. Al cerrar la última ventana privada el perfil se manda a borrar (WebView2 lo borra al terminar su proceso) y la próxima usa otro; restos de un cierre forzado se borran al arrancar. Prueba: `tools/smoke/privada.txt`. |
 | Páginas propias | Nueva pestaña e historial sin JavaScript, con CSP `default-src 'none'`; títulos y URLs de sitios siempre escapados; sólo se enlaza http/https. |
 | Snapshots | Imágenes de páginas en `snapshots\` con nombres aleatorios (no revelan la URL); `session.json` sólo acepta nombres generados por la app. Se borran al cerrar la pestaña, con "Borrar datos" y al arrancar si quedaron huérfanos. La ventana privada nunca los escribe. |
 

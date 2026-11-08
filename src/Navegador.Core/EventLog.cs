@@ -10,10 +10,13 @@ namespace Navegador.Core;
 /// </summary>
 public sealed class EventLog : IDisposable
 {
-    private readonly StreamWriter _writer;
+    private readonly StreamWriter? _writer;
     private readonly object _lock = new();
 
-    public string Path { get; }
+    /// <summary>Log que no escribe nada: lo usa la ventana privada, que no deja actividad en disco.</summary>
+    public static EventLog Off { get; } = new();
+
+    public string? Path { get; }
 
     public EventLog(string path)
     {
@@ -22,8 +25,11 @@ public sealed class EventLog : IDisposable
         _writer = new StreamWriter(new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
     }
 
+    private EventLog() { }
+
     public void Write(Dictionary<string, object?> record)
     {
+        if (_writer is null) return;
         record.TryAdd("ts", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
         var line = JsonSerializer.Serialize(record);
         lock (_lock) _writer.WriteLine(line);
@@ -40,7 +46,7 @@ public sealed class EventLog : IDisposable
 
     public void Dispose()
     {
-        lock (_lock) _writer.Dispose();
+        lock (_lock) _writer?.Dispose();
     }
 
     public sealed class Span

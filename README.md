@@ -11,7 +11,7 @@ Plan, fases y criterios: [`docs/PLAN.md`](docs/PLAN.md).
 - **Arranque liviano**: la sesión se restaura con todas las pestañas dormidas salvo la activa.
 - Barra de estado con RAM real / presupuesto, pestañas dormidas, bloqueos y zoom.
 - **Controles**: menú ⋮ (nueva pestaña, ventana privada, favoritos, historial, descargas, zoom, buscar, imprimir, borrar datos, ajustes), estrella de favoritos, página de nueva pestaña con buscador, favoritos y recientes, historial (`about:history`), barra de búsqueda en la página, menú de pestaña con clic derecho (recargar, duplicar, dormir ahora, cerrar las demás).
-- **Seguridad y privacidad**: HTTPS primero (vuelve a http sólo si el sitio no tiene HTTPS), notificaciones rechazadas, sin canales página→app, contraseñas sin guardar, SmartScreen, candado/advertencia en la barra, borrar datos, ventana privada. Detalle en `docs/PLAN.md`.
+- **Seguridad y privacidad**: HTTPS primero (vuelve a http sólo si el sitio no tiene HTTPS), notificaciones rechazadas, sin canales página→app, contraseñas sin guardar, SmartScreen, candado/advertencia en la barra, borrar datos, ventana privada que no trae nada de la normal (perfil propio, sin favoritos ni historial) y no deja actividad (ni log). Detalle en `docs/PLAN.md`.
 
 Atajos: `Ctrl+T` nueva · `Ctrl+W` cerrar · `Ctrl+Shift+T` reabrir · `Ctrl+Shift+N` ventana privada · `Ctrl+L`/`Alt+D`/`F6` dirección · `Ctrl+D` favorito · `Ctrl+H` historial · `Ctrl+J` descargas · `Ctrl+F` buscar · `Ctrl+P` imprimir · `Ctrl++`/`Ctrl+-`/`Ctrl+0` zoom · `Ctrl+Shift+Supr` borrar datos · `Ctrl+Tab` · `Ctrl+1..9` · `F5` · `Alt+←/→` · `F11` · clic del medio cierra la pestaña.
 
@@ -40,7 +40,7 @@ No uses `metrics record --app msedgewebview2` para medir el navegador: ese nombr
 
 Opciones: `Navegador.exe [--data-dir <carpeta>] [--private] [--automation <pasos.txt>] [url]`.
 - `--data-dir`: otra carpeta de datos (pruebas, sin tocar tu perfil).
-- `--automation`: prueba de humo **oculta**: las ventanas se abren fuera de la pantalla, sin barra de tareas y sin tomar el foco; los menús no se abren (se dibujan en la captura); la app se cierra sola al terminar, aunque falle. El navegador ejecuta los pasos internamente y guarda capturas en `<datos>\shots\`. Pasos listos en `tools/smoke/` (`controles.txt`, `privacidad.txt`). Órdenes: `wait MS`, `go TEXTO`, `newtab [TEXTO]`, `tab N`, `sleep N`, `bookmark`, `find TEXTO`, `findclose`, `zoom +|-|0`, `history`, `menu`, `tabmenu N`, `closemenus`, `private`, `main`, `js CÓDIGO`, `cleardata`, `shot NOMBRE`, `close`. Nunca usar teclas o clics simulados sobre el escritorio real.
+- `--automation`: prueba de humo **oculta**: las ventanas se abren fuera de la pantalla, sin barra de tareas y sin tomar el foco; los menús no se abren (se dibujan en la captura); la app se cierra sola al terminar, aunque falle. El navegador ejecuta los pasos internamente y guarda capturas en `<datos>\shots\`. Pasos listos en `tools/smoke/` (`controles.txt`, `privacidad.txt`, `privada.txt`, `snapshot*.txt`). Órdenes: `wait MS`, `go TEXTO`, `newtab [TEXTO]`, `tab N`, `sleep N`, `bookmark`, `find TEXTO`, `findclose`, `zoom +|-|0`, `history`, `menu`, `tabmenu N`, `closemenus`, `private`, `main`, `js CÓDIGO`, `cleardata`, `shot NOMBRE`, `close`. Las ventanas privadas no escriben en el log; sólo quedan los pasos y los resultados de `js` de la prueba. Nunca usar teclas o clics simulados sobre el escritorio real.
 
 ## Estructura
 | Carpeta | Qué |
