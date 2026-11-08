@@ -11,3 +11,6 @@ bin/
 obj/
 *.user
 .vs/
+
+# Salida de dotnet publish (el acceso directo apunta acá)
+dist/
