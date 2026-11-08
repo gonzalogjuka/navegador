@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — 2026-11-08
+- El perfil privado se borra al salir de la app: se espera a que termine el proceso de WebView2 (0.24 s medidos) y se borra la carpeta, en vez de depender de que WebView2 llegue a hacerlo (en una corrida quedó).
+- `--automation` también corre arrancando con `--private` (lo ejecuta la primera ventana que carga); nueva orden `toprivate`. Los pasos y resultados de la prueba van siempre al log de la app.
+- `tools/smoke/privada-rastros.ps1`: busca en toda la carpeta de datos (logs, data.json, sesión, snapshots, perfiles de WebView2) una marca visitada en privada, con una corrida de control en la ventana normal que la tiene que encontrar.
+
 ## 0.3.1 — 2026-11-08
 La ventana privada no trae nada de la normal ni deja actividad.
 - No trae: la nueva pestaña privada sólo tiene el buscador (antes mostraba los favoritos); sin estrella, sin menú Favoritos ni Historial, Ctrl+D/Ctrl+H no hacen nada y `about:history` abre la nueva pestaña privada. Usa un perfil de WebView2 propio en modo InPrivate (antes era el InPrivate del perfil normal, que hereda zoom por sitio y permisos): zoom 125 % en la normal → 100 % en la privada; cookie y localStorage de la normal no llegan. Los sitios sin HTTPS detectados y el "permitir este sitio" del escudo son de cada ventana privada, en memoria (antes se compartían, y el escudo escribía el sitio en `settings.json`).

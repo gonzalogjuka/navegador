@@ -1,5 +1,6 @@
 using System.IO;
 using Navegador.Core;
+using Process = System.Diagnostics.Process;
 
 namespace Navegador;
 
@@ -14,15 +15,28 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
     public BrowserData Data { get; } = data;
     /// <summary>Hosts sin HTTPS detectados en esta corrida por las ventanas normales (HTTPS primero los deja en http).</summary>
     public HashSet<string> HttpExempt { get; } = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>--automation: archivo de pasos de prueba que ejecuta la ventana principal (ver MainWindow.Automation.cs).</summary>
+    /// <summary>--automation: archivo de pasos de prueba (ver MainWindow.Automation.cs y TakeAutomationScript).</summary>
     public string? AutomationScript { get; init; }
     /// <summary>Si se abrió alguna ventana normal. Con sólo ventanas privadas no se escribe data.json.</summary>
     public bool NormalWindowOpened { get; private set; }
+    public bool PrivateWindowOpened { get; private set; }
+    /// <summary>Proceso navegador de WebView2 (lo anota cada pestaña al crearse; cambia si el motor se reinicia).</summary>
+    public int BrowserProcessId { get; set; }
     /// <summary>
     /// Perfil de WebView2 de las ventanas privadas abiertas. Al cerrarse la última se manda a borrar y la próxima tanda
     /// usa uno nuevo: WebView2 no deja volver a abrir un perfil que se está borrando (0x8007012F).
     /// </summary>
     public string PrivateProfileName { get; private set; } = NewPrivateProfileName();
+
+    private bool _automationStarted;
+
+    /// <summary>El archivo de pasos lo ejecuta una sola vez la primera ventana que carga (con --private, la privada).</summary>
+    public string? TakeAutomationScript()
+    {
+        if (_automationStarted || AutomationScript is null) return null;
+        _automationStarted = true;
+        return AutomationScript;
+    }
 
     public void SaveData()
     {
@@ -51,9 +65,24 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
         }
     }
 
+    /// <summary>
+    /// Al salir: espera a que termine el proceso de WebView2 (suelta los archivos del perfil) y borra los perfiles
+    /// privados en ese momento, sin depender de que WebView2 llegue a hacerlo ni del próximo arranque.
+    /// </summary>
+    public void DeletePrivateProfilesOnExit()
+    {
+        if (!PrivateWindowOpened) return;
+        if (BrowserProcessId > 0)
+        {
+            try { using var p = Process.GetProcessById(BrowserProcessId); p.WaitForExit(5000); }
+            catch (ArgumentException) { } // ya terminó
+        }
+        DeletePrivateProfiles();
+    }
+
     public MainWindow OpenWindow(string? startUrl, bool isPrivate)
     {
-        if (!isPrivate) NormalWindowOpened = true;
+        if (isPrivate) PrivateWindowOpened = true; else NormalWindowOpened = true;
         var w = new MainWindow(this, startUrl, isPrivate);
         if (AutomationScript is not null)
         {

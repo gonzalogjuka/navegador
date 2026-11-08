@@ -53,6 +53,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         if (_services?.NormalWindowOpened == true) _services.SaveData();
+        _services?.DeletePrivateProfilesOnExit();
         _log?.Event("record_stop");
         _log?.Dispose();
         base.OnExit(e);

@@ -118,7 +118,7 @@ public partial class MainWindow : Window
         _log.Event("startup_done", ("tabs", _tabs.Count), ("blocklist_domains", _blockList.Domains.Count), ("private", _isPrivate));
         _tick.Start();
         Sample();
-        if (!_isPrivate && _app.AutomationScript is { } script) await RunAutomationAsync(script);
+        if (_app.TakeAutomationScript() is { } script) await RunAutomationAsync(script);
     }
 
     private Task<CoreWebView2Environment> CreateEnvironmentAsync() =>
@@ -254,6 +254,7 @@ public partial class MainWindow : Window
             await wv.EnsureCoreWebView2Async(_env);
         }
         var core = wv.CoreWebView2;
+        _app.BrowserProcessId = (int)core.BrowserProcessId;
         Harden(core);
 
         core.SourceChanged += (_, _) =>

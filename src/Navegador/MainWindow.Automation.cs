@@ -11,7 +11,7 @@ namespace Navegador;
 /// Pruebas de humo sin teclas simuladas: Navegador.exe --automation pasos.txt ejecuta los pasos dentro de la app,
 /// así no depende del foco ni puede escribir en otra ventana. Una orden por línea; '#' comenta.
 ///   wait MS · go TEXTO · newtab [TEXTO] · tab N · sleep N · bookmark · find TEXTO · findclose · zoom +|-|0
-///   history · menu · tabmenu N · closemenus · private · main · shot NOMBRE · close
+///   history · menu · tabmenu N · closemenus · private · main · toprivate (ir a la ventana privada abierta) · shot NOMBRE · close
 ///   js CÓDIGO (resultado al log) · cleardata (borra datos sin preguntar)
 /// Las capturas (interfaz + página + menú abierto, aunque la ventana esté tapada) van a &lt;datos&gt;\shots\NOMBRE.png.
 /// </summary>
@@ -37,22 +37,23 @@ public partial class MainWindow
                 var sp = line.IndexOf(' ');
                 var cmd = sp < 0 ? line : line[..sp];
                 var arg = sp < 0 ? "" : line[(sp + 1)..].Trim();
-                _log.Event("automation_step", ("cmd", cmd), ("arg", arg), ("private", target._isPrivate));
+                // Siempre al log de la app: el de una ventana privada no escribe.
+                _app.Log.Event("automation_step", ("cmd", cmd), ("arg", arg), ("private", target._isPrivate));
                 try
                 {
                     await target.RunStepAsync(cmd, arg, w => target = w);
                 }
                 catch (Exception ex)
                 {
-                    _log.Event("automation_error", ("cmd", cmd), ("message", ex.Message));
+                    _app.Log.Event("automation_error", ("cmd", cmd), ("message", ex.Message));
                 }
             }
         }
         catch (IOException ex)
         {
-            _log.Event("automation_error", ("cmd", "(archivo)"), ("message", ex.Message));
+            _app.Log.Event("automation_error", ("cmd", "(archivo)"), ("message", ex.Message));
         }
-        _log.Event("automation_done");
+        _app.Log.Event("automation_done");
         Application.Current.Shutdown();
     }
 
@@ -105,6 +106,9 @@ public partial class MainWindow
                 break;
             case "main":
                 switchTo(Application.Current.Windows.OfType<MainWindow>().First(m => !m._isPrivate));
+                break;
+            case "toprivate":
+                switchTo(Application.Current.Windows.OfType<MainWindow>().First(m => m._isPrivate));
                 break;
             case "shot": await ShotAsync(arg); break;
             case "close": Close(); break;
