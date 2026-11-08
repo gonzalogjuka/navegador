@@ -9,6 +9,7 @@ public sealed record AppPaths(string Root)
     public string WebViewData => Path.Combine(Root, "WebView2");
     public string Settings => Path.Combine(Root, "settings.json");
     public string Session => Path.Combine(Root, "session.json");
+    public string Data => Path.Combine(Root, "data.json");
     public string Logs => Path.Combine(Root, "logs");
 
     public static AppPaths Default() =>

@@ -35,13 +35,24 @@ public sealed class BrowserTab : INotifyPropertyChanged
     /// <summary>Scroll guardado al dejar la pestaña; se reaplica al restaurarla.</summary>
     public string? SavedScroll { get; set; }
     public Core.EventLog.Span? RestoreSpan { get; set; }
+    /// <summary>Página propia que muestra (about:blank, about:history) o null si es un sitio.</summary>
+    public string? InternalPage { get; set; }
+    /// <summary>Host que HTTPS primero acaba de subir a https y URL http para volver si falla.</summary>
+    public string? UpgradeHost { get; set; }
+    public string? UpgradeFallback { get; set; }
+    /// <summary>Navegación http cancelada para subirla a https; su NavigationCompleted (cancelada) se ignora.</summary>
+    public ulong? CancelledNavigationId { get; set; }
+    /// <summary>Última navegación iniciada; los avisos de navegaciones anteriores (interrumpidas) se ignoran.</summary>
+    public ulong? CurrentNavigationId { get; set; }
 
     public string Title { get => _title; set => Set(ref _title, string.IsNullOrWhiteSpace(value) ? Url : value); }
     public string? FaviconUri { get => _faviconUri; set => Set(ref _faviconUri, string.IsNullOrEmpty(value) ? null : value); }
-    public TabState State { get => _state; set { if (Set(ref _state, value)) OnPropertyChanged(nameof(IsSleeping)); } }
-    public bool IsActive { get => _isActive; set => Set(ref _isActive, value); }
+    public TabState State { get => _state; set { if (Set(ref _state, value)) { OnPropertyChanged(nameof(IsSleeping)); OnPropertyChanged(nameof(CanSleep)); } } }
+    public bool IsActive { get => _isActive; set { if (Set(ref _isActive, value)) OnPropertyChanged(nameof(CanSleep)); } }
     public bool IsLoading { get => _isLoading; set => Set(ref _isLoading, value); }
     public bool IsSleeping => _state != TabState.Live;
+    /// <summary>"Dormir ahora" del menú de la pestaña: no aplica a la activa ni a una ya descartada.</summary>
+    public bool CanSleep => !_isActive && _state != TabState.Discarded;
 
     public TabSnapshot Snapshot() => new(Id, IsActive, State, LastActiveUtc, PlayingAudio);
 

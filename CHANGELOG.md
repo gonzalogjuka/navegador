@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 — 2026-11-07
+Controles, seguridad y privacidad.
+- Menú ⋮, estrella de favoritos (Ctrl+D), página de nueva pestaña (buscador, favoritos, recientes), historial (`about:history`, Ctrl+H), buscar en la página con barra propia (Ctrl+F), zoom con indicador (Ctrl +/−/0), imprimir (Ctrl+P), descargas (Ctrl+J), menú de pestaña (recargar, duplicar, dormir ahora, cerrar las demás), ventana privada (Ctrl+Shift+N, perfil InPrivate).
+- HTTPS primero con vuelta a http si el sitio no tiene HTTPS (también sus subdominios); notificaciones rechazadas; host objects y web messages apagados; contraseñas sin guardar; SmartScreen explícito; candado/advertencia en la barra; borrar datos de navegación (Ctrl+Shift+Supr).
+- Páginas propias sin JavaScript, con CSP y texto de sitios escapado (test de inyección incluido).
+- Historial y favoritos normalizan la URL (`a.com` = `a.com/`); el historial guarda la dirección final tras redirecciones.
+- Los avisos de navegaciones interrumpidas ya no se registran como errores.
+- `--automation pasos.txt`: prueba de humo dentro de la app, con capturas que no dependen de la pantalla. Reemplaza las teclas simuladas, que en una prueba se fueron a otra ventana.
+- `--private` abre directo una ventana privada.
+
 ## 0.1.0 — 2026-11-07
 Primera versión usable.
 - Repo ordenado: el medidor pasa a `tools/metrics` (20 tests pasan, 1 omitido a propósito en Windows); se borra la copia duplicada `navegador-metrics-v4/`.

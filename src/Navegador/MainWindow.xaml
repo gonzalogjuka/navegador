@@ -6,6 +6,30 @@
         UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Window.Resources>
         <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+        <SolidColorBrush x:Key="ToolbarBrush" Color="#35363A"/>
+
+        <Style TargetType="ContextMenu">
+            <Setter Property="Foreground" Value="#E8EAED"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="#292A2D" BorderBrush="#3C4043" BorderThickness="1" CornerRadius="6" Padding="4">
+                            <ItemsPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Margin="8,4" Background="#3C4043"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style x:Key="IconButton" TargetType="Button">
             <Setter Property="FontFamily" Value="{StaticResource Icons}"/>
@@ -62,6 +86,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -69,6 +94,8 @@
         <!-- Pestañas -->
         <DockPanel x:Name="TabBar" Grid.Row="0" Background="#202124" Margin="6,6,6,0" LastChildFill="True">
             <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE710;" ToolTip="Nueva pestaña (Ctrl+T)" Click="NewTab_Click" VerticalAlignment="Center"/>
+            <TextBlock x:Name="PrivateBadge" DockPanel.Dock="Left" Text="Privada" Foreground="#C58AF9" FontWeight="SemiBold"
+                       VerticalAlignment="Center" Margin="6,0,10,0" Visibility="Collapsed"/>
             <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" PreviewMouseWheel="TabScroll_Wheel">
                 <ItemsControl x:Name="TabList">
                     <ItemsControl.ItemsPanel>
@@ -81,6 +108,16 @@
                             <Border x:Name="tab" Width="200" Height="34" Margin="0,0,2,0" CornerRadius="8,8,0,0" Padding="10,0,4,0"
                                     Background="Transparent" Cursor="Hand" ToolTip="{Binding Title}"
                                     MouseLeftButtonDown="Tab_MouseDown" MouseUp="Tab_MouseUp">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Recargar" Click="TabMenu_Reload"/>
+                                        <MenuItem Header="Duplicar" Click="TabMenu_Duplicate"/>
+                                        <MenuItem Header="Dormir ahora" Click="TabMenu_Sleep" IsEnabled="{Binding CanSleep}"/>
+                                        <Separator/>
+                                        <MenuItem Header="Cerrar las demás pestañas" Click="TabMenu_CloseOthers"/>
+                                        <MenuItem Header="Cerrar" InputGestureText="Ctrl+W" Click="TabMenu_Close"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -111,7 +148,7 @@
                             </Border>
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                    <Setter TargetName="tab" Property="Background" Value="#35363A"/>
+                                    <Setter TargetName="tab" Property="Background" Value="{DynamicResource ToolbarBrush}"/>
                                     <Setter TargetName="title" Property="Foreground" Value="#E8EAED"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsSleeping}" Value="True">
@@ -125,7 +162,7 @@
         </DockPanel>
 
         <!-- Barra de herramientas -->
-        <Grid x:Name="Toolbar" Grid.Row="1" Background="#35363A">
+        <Grid x:Name="Toolbar" Grid.Row="1" Background="{DynamicResource ToolbarBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -136,29 +173,53 @@
                 <Button x:Name="ForwardButton" Style="{StaticResource IconButton}" Content="&#xE72A;" ToolTip="Adelante (Alt+→)" Click="Forward_Click"/>
                 <Button x:Name="ReloadButton" Style="{StaticResource IconButton}" Content="&#xE72C;" ToolTip="Recargar (F5)" Click="Reload_Click"/>
             </StackPanel>
-            <Border Grid.Column="1" Background="#202124" CornerRadius="15" Margin="4,5" Padding="12,0">
-                <TextBox x:Name="Address" Background="Transparent" Foreground="#E8EAED" BorderThickness="0" CaretBrush="#E8EAED"
-                         VerticalContentAlignment="Center" Height="30" FontSize="14"
-                         KeyDown="Address_KeyDown" GotKeyboardFocus="Address_GotFocus" PreviewMouseLeftButtonDown="Address_PreviewMouseDown"/>
+            <Border Grid.Column="1" Background="#202124" CornerRadius="15" Margin="4,5" Padding="12,0,2,0">
+                <DockPanel LastChildFill="True">
+                    <Button x:Name="StarButton" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE734;"
+                            Width="28" Height="28" ToolTip="Agregar a favoritos (Ctrl+D)" Click="Star_Click"/>
+                    <TextBlock x:Name="LockIcon" DockPanel.Dock="Left" FontFamily="{StaticResource Icons}" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#9AA0A6"/>
+                    <TextBox x:Name="Address" Background="Transparent" Foreground="#E8EAED" BorderThickness="0" CaretBrush="#E8EAED"
+                             VerticalContentAlignment="Center" Height="30" FontSize="14"
+                             KeyDown="Address_KeyDown" GotKeyboardFocus="Address_GotFocus" PreviewMouseLeftButtonDown="Address_PreviewMouseDown"/>
+                </DockPanel>
             </Border>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,4,8,4">
-                <Button Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Ajustes (settings.json; se aplican al reiniciar)" Click="Settings_Click"/>
+                <Button x:Name="MenuButton" Style="{StaticResource IconButton}" Content="&#xE712;" ToolTip="Menú" Click="Menu_Click"/>
             </StackPanel>
         </Grid>
 
+        <!-- Buscar en la página -->
+        <Border x:Name="FindBar" Grid.Row="2" Background="{DynamicResource ToolbarBrush}" Padding="8,0,8,6" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Border Background="#202124" CornerRadius="12" Padding="10,0" Width="260">
+                    <TextBox x:Name="FindBox" Background="Transparent" Foreground="#E8EAED" BorderThickness="0" CaretBrush="#E8EAED"
+                             Height="26" VerticalContentAlignment="Center" TextChanged="FindBox_TextChanged" KeyDown="FindBox_KeyDown"/>
+                </Border>
+                <TextBlock x:Name="FindCount" Foreground="#9AA0A6" VerticalAlignment="Center" Margin="10,0" MinWidth="50"/>
+                <Button Style="{StaticResource IconButton}" Content="&#xE70E;" ToolTip="Anterior (Shift+Enter)" Click="FindPrev_Click"/>
+                <Button Style="{StaticResource IconButton}" Content="&#xE70D;" ToolTip="Siguiente (Enter)" Click="FindNext_Click"/>
+                <Button Style="{StaticResource IconButton}" Content="&#xE711;" ToolTip="Cerrar (Esc)" Click="FindClose_Click"/>
+            </StackPanel>
+        </Border>
+
         <!-- Contenido: un WebView2 por pestaña viva; sólo el activo es visible -->
-        <Grid x:Name="Host" Grid.Row="2" Background="White">
+        <Grid x:Name="Host" Grid.Row="3" Background="White">
             <TextBlock x:Name="Placeholder" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#5F6368" FontSize="16" Visibility="Collapsed"/>
         </Grid>
 
         <!-- Estado: lo que hace liviano al navegador, a la vista -->
-        <DockPanel x:Name="StatusBar" Grid.Row="3" Background="#202124" LastChildFill="False">
+        <DockPanel x:Name="StatusBar" Grid.Row="4" Background="#202124" LastChildFill="False">
             <TextBlock x:Name="MemoryText" DockPanel.Dock="Left" Margin="10,3" Foreground="#9AA0A6" VerticalAlignment="Center"/>
             <TextBlock x:Name="HintText" DockPanel.Dock="Left" Margin="10,3" Foreground="Orange" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
             <Button x:Name="ShieldButton" DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Margin="4,1" Click="Shield_Click"
                     ToolTip="Clic: permitir o volver a bloquear en este sitio">
                 <TextBlock x:Name="ShieldText"/>
+            </Button>
+            <Button x:Name="ZoomButton" DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Margin="4,1" Click="ZoomReset_Click"
+                    ToolTip="Zoom de esta pestaña. Clic: volver a 100 %" Visibility="Collapsed">
+                <TextBlock x:Name="ZoomText"/>
             </Button>
         </DockPanel>
     </Grid>

@@ -8,15 +8,20 @@ namespace Navegador;
 public partial class App : Application
 {
     private EventLog? _log;
+    private AppServices? _services;
 
-    /// <summary>Uso: Navegador.exe [--data-dir carpeta] [url]</summary>
+    /// <summary>Uso: Navegador.exe [--data-dir carpeta] [--private] [--automation pasos.txt] [url]</summary>
     private void OnStartup(object sender, StartupEventArgs e)
     {
         var paths = AppPaths.Default();
         string? url = null;
+        var isPrivate = false;
+        string? automation = null;
         for (var i = 0; i < e.Args.Length; i++)
         {
             if (e.Args[i] == "--data-dir" && i + 1 < e.Args.Length) paths = new AppPaths(Path.GetFullPath(e.Args[++i]));
+            else if (e.Args[i] == "--private") isPrivate = true;
+            else if (e.Args[i] == "--automation" && i + 1 < e.Args.Length) automation = Path.GetFullPath(e.Args[++i]);
             else url ??= e.Args[i];
         }
 
@@ -26,9 +31,11 @@ public partial class App : Application
         var blockList = File.Exists(blockFile) ? BlockList.Parse(File.ReadAllText(blockFile)) : new BlockList([]);
         _log.Event("record_start", ("app", "navegador"), ("version", typeof(App).Assembly.GetName().Version?.ToString()),
             ("ram_budget_mb", settings.RamBudgetMb), ("suspend_after_s", settings.SuspendAfterSeconds),
-            ("discard_after_min", settings.DiscardAfterMinutes), ("focus_lost_s", settings.FocusLostSeconds));
+            ("discard_after_min", settings.DiscardAfterMinutes), ("focus_lost_s", settings.FocusLostSeconds),
+            ("https_first", settings.HttpsFirst), ("block_notifications", settings.BlockNotifications));
 
-        new MainWindow(paths, settings, blockList, _log, url).Show();
+        _services = new AppServices(paths, settings, blockList, _log, BrowserData.Load(paths.Data)) { AutomationScript = automation };
+        _services.OpenWindow(url, isPrivate);
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
@@ -41,6 +48,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _services?.SaveData();
         _log?.Event("record_stop");
         _log?.Dispose();
         base.OnExit(e);

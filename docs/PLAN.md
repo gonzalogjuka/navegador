@@ -26,11 +26,30 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 | Fase | Contenido | Estado |
 |---|---|---|
 | 0 | Medidor (`tools/metrics`): sampler, eventos, estadísticas, benchmarks | Hecho (antes, en Linux y Windows) |
-| 1 | Navegador usable: pestañas, barra de direcciones, atajos, ventanas nuevas como pestañas, pantalla completa, sesión, acceso directo | Esta entrega |
-| 2 | Las cuatro innovaciones con log de métricas y barra de estado (RAM / presupuesto / dormidas / bloqueados) | Esta entrega |
+| 1 | Navegador usable: pestañas, barra de direcciones, atajos, ventanas nuevas como pestañas, pantalla completa, sesión, acceso directo | Hecho (0.1.0) |
+| 2 | Las cuatro innovaciones con log de métricas y barra de estado (RAM / presupuesto / dormidas / bloqueados) | Hecho (0.1.0) |
 | 3 | Uso real del usuario → leer logs → ajustar umbrales y arreglar lo que falle | Iterativo |
 | 4 | Comparación formal contra Chrome con 20 pestañas (mismo set de URLs, misma duración) | Pendiente |
-| 5 | Pulido: favoritos, historial, descargas propias, página de nueva pestaña, ajustes con UI, navegador predeterminado | Pendiente, según uso |
+| 5a | Controles: menú ⋮, favoritos (estrella, Ctrl+D), historial (about:history), página de nueva pestaña, buscar en la página, zoom, imprimir, descargas (diálogo de WebView2), menú de pestaña (recargar, duplicar, dormir ahora, cerrar otras), ventana privada | Hecho (0.2.0) |
+| 5b | Seguridad y privacidad: ver tabla abajo | Hecho (0.2.0) |
+| 5c | Ajustes con interfaz (hoy: settings.json), navegador predeterminado, una sola instancia, importar favoritos de Chrome/Edge, GPC | Pendiente, según uso |
+
+## Seguridad y privacidad (0.2.0)
+
+| Medida | Cómo |
+|---|---|
+| HTTPS primero | http:// se reintenta como https://; si falla (cualquier error salvo cancelación) o el sitio redirige a http, el dominio y sus subdominios quedan en http por esa corrida. No toca redes locales ni puertos explícitos (`HttpsUpgrade`). |
+| Notificaciones | Rechazadas sin preguntar (`BlockNotifications`). Cámara, micrófono y ubicación los pregunta WebView2. |
+| Superficie expuesta | `AreHostObjectsAllowed=false`, `IsWebMessageEnabled=false`: las páginas no tienen ningún canal hacia la app. |
+| Contraseñas | No se guardan en el perfil (`IsPasswordAutosaveEnabled=false`); usar un gestor. |
+| SmartScreen | `IsReputationCheckingRequired=true` contra sitios y descargas maliciosas. |
+| Rastreo | Prevención Strict + lista de dominios (ya en 0.1.0). |
+| Indicador de conexión | Candado en https, advertencia naranja en http. |
+| Borrar datos | Menú ⋮ o Ctrl+Shift+Supr: cookies, caché, almacenamiento de sitios e historial. |
+| Ventana privada | Perfil InPrivate de WebView2: sin historial, cookies ni sesión al cerrar. |
+| Páginas propias | Nueva pestaña e historial sin JavaScript, con CSP `default-src 'none'`; títulos y URLs de sitios siempre escapados; sólo se enlaza http/https. |
+
+Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin interceptar todas las peticiones, lo que cuesta rendimiento).
 
 ## Criterios de éxito (fase 4)
 - Con 20 pestañas abiertas y 15 min de uso normal: memoria privada promedio ≤ 50 % de la de Chrome con las mismas pestañas.

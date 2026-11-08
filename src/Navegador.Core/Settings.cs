@@ -15,6 +15,10 @@ public sealed class Settings
     public List<string> AllowSites { get; set; } = [];
     /// <summary>Argumentos de Chromium para WebView2. Se aplican al reiniciar.</summary>
     public string BrowserArguments { get; set; } = "--process-per-site";
+    /// <summary>Reintenta http:// como https:// y vuelve a http sólo si el sitio no tiene HTTPS.</summary>
+    public bool HttpsFirst { get; set; } = true;
+    /// <summary>Rechaza los pedidos de notificaciones de los sitios sin preguntar.</summary>
+    public bool BlockNotifications { get; set; } = true;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

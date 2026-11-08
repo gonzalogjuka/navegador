@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -16,12 +17,14 @@ public partial class MainWindow : Window
 {
     private const int SampleEveryTicks = 5;   // tick = 1 s
     private const int SaveEveryTicks = 30;
+    private static readonly double[] ZoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0];
 
-    private readonly AppPaths _paths;
+    private readonly AppServices _app;
     private readonly Settings _settings;
     private readonly BlockList _blockList;
     private readonly EventLog _log;
     private readonly string? _startUrl;
+    private readonly bool _isPrivate;
     private readonly ObservableCollection<BrowserTab> _tabs = [];
     private readonly Stack<string> _closed = new();
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -37,17 +40,28 @@ public partial class MainWindow : Window
     private bool _activeLowered;
     private bool _hibernateDonePending;
 
-    private (WindowState State, WindowStyle Style)? _beforeFullscreen;
+    private int _recoveries;
+    private readonly Queue<DateTime> _recoveryTimes = new();
+    private bool _recovering;
 
-    public MainWindow(AppPaths paths, Settings settings, BlockList blockList, EventLog log, string? startUrl)
+    private (WindowState State, WindowStyle Style)? _beforeFullscreen;
+    private CoreWebView2? _findCore;
+
+    public MainWindow(AppServices app, string? startUrl, bool isPrivate)
     {
-        _paths = paths;
-        _settings = settings;
-        _blockList = blockList;
-        _log = log;
+        _app = app;
+        _settings = app.Settings;
+        _blockList = app.BlockList;
+        _log = app.Log;
         _startUrl = startUrl;
+        _isPrivate = isPrivate;
         InitializeComponent();
         TabList.ItemsSource = _tabs;
+        if (isPrivate)
+        {
+            Resources["ToolbarBrush"] = new SolidColorBrush(Color.FromRgb(0x3B, 0x2E, 0x58));
+            PrivateBadge.Visibility = Visibility.Visible;
+        }
         Loaded += OnLoaded;
         Activated += OnActivated;
         Deactivated += OnDeactivated;
@@ -56,11 +70,13 @@ public partial class MainWindow : Window
         _tick.Tick += OnTick;
     }
 
+    private string WindowSuffix => _isPrivate ? "Navegador (privada)" : "Navegador";
+
     // ---------- Arranque y cierre ----------
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        var span = _log.StartSpan("startup");
+        var span = _log.StartSpan("startup", ("private", _isPrivate));
         try
         {
             _env = await CreateEnvironmentAsync();
@@ -73,7 +89,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var session = SessionStore.Load(_paths.Session);
+        var session = _isPrivate ? null : SessionStore.Load(_app.Paths.Session);
         if (session is not null)
         {
             // Todas descartadas: arrancar no carga páginas que no vas a mirar.
@@ -86,21 +102,38 @@ public partial class MainWindow : Window
         else if (session is not null)
             await ActivateAsync(_tabs[session.ActiveIndex]);
         else
-            await ActivateAsync(await NewTabAsync("about:blank"));
+            await ActivateAsync(await NewTabAsync(InternalPages.NewTab));
 
         span.End();
-        _log.Event("startup_done", ("tabs", _tabs.Count), ("blocklist_domains", _blockList.Domains.Count));
+        _log.Event("startup_done", ("tabs", _tabs.Count), ("blocklist_domains", _blockList.Domains.Count), ("private", _isPrivate));
         _tick.Start();
         Sample();
+        if (!_isPrivate && _app.AutomationScript is { } script) await RunAutomationAsync(script);
     }
 
     private Task<CoreWebView2Environment> CreateEnvironmentAsync() =>
-        CoreWebView2Environment.CreateAsync(null, _paths.WebViewData,
+        CoreWebView2Environment.CreateAsync(null, _app.Paths.WebViewData,
             new CoreWebView2EnvironmentOptions(_settings.BrowserArguments));
 
-    private int _recoveries;
-    private readonly Queue<DateTime> _recoveryTimes = new();
-    private bool _recovering;
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        _tick.Stop();
+        SaveSession();
+        _log.Event("shutdown", ("tabs", _tabs.Count), ("blocked_total", _blockedTotal), ("private", _isPrivate));
+        foreach (var t in _tabs) t.WebView?.Dispose();
+    }
+
+    private void SaveSession()
+    {
+        if (_isPrivate || _tabs.Count == 0) return;
+        var tabs = _tabs.Select(t => new SavedTab(t.Url, t.Title)).ToList();
+        var active = _active is null ? 0 : Math.Max(0, _tabs.IndexOf(_active));
+        try { SessionStore.Save(_app.Paths.Session, new SavedSession(tabs, active)); }
+        catch (IOException ex) { _log.Event("error", ("where", "save_session"), ("message", ex.Message)); }
+        _app.SaveData();
+    }
+
+    // ---------- Caídas del motor ----------
 
     private async void OnProcessFailed(BrowserTab tab, CoreWebView2ProcessFailedEventArgs e)
     {
@@ -133,12 +166,15 @@ public partial class MainWindow : Window
                 catch (InvalidOperationException) { }
                 t.State = TabState.Discarded;
             }
-            if (Process.GetProcessesByName("RTSS").Length > 0)
+            var rtss = Process.GetProcessesByName("RTSS");
+            if (rtss.Length > 0)
             {
                 HintText.Text = "El motor se reinició: RivaTuner (RTSS) se inyecta en WebView2. Corré tools\\rtss-exclude.ps1 como administrador.";
                 HintText.Visibility = Visibility.Visible;
                 _log.Event("rtss_detected");
             }
+            foreach (var p in rtss) p.Dispose();
+
             var now = DateTime.UtcNow;
             _recoveryTimes.Enqueue(now);
             while (_recoveryTimes.Peek() < now.AddMinutes(-2)) _recoveryTimes.Dequeue();
@@ -164,23 +200,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
-    {
-        _tick.Stop();
-        SaveSession();
-        _log.Event("shutdown", ("tabs", _tabs.Count), ("blocked_total", _blockedTotal));
-        foreach (var t in _tabs) t.WebView?.Dispose();
-    }
-
-    private void SaveSession()
-    {
-        if (_tabs.Count == 0) return;
-        var tabs = _tabs.Select(t => new SavedTab(t.Url, t.Title)).ToList();
-        var active = _active is null ? 0 : Math.Max(0, _tabs.IndexOf(_active));
-        try { SessionStore.Save(_paths.Session, new SavedSession(tabs, active)); }
-        catch (IOException ex) { _log.Event("error", ("where", "save_session"), ("message", ex.Message)); }
-    }
-
     // ---------- Pestañas ----------
 
     private void AddTab(BrowserTab tab, int? index = null)
@@ -191,7 +210,7 @@ public partial class MainWindow : Window
 
     private async Task<BrowserTab> NewTabAsync(string url, bool navigate = true)
     {
-        var tab = new BrowserTab { Url = url, Title = url == "about:blank" ? "Nueva pestaña" : url };
+        var tab = new BrowserTab { Url = url, Title = url == InternalPages.NewTab ? "Nueva pestaña" : url };
         AddTab(tab, _active is null ? null : _tabs.IndexOf(_active) + 1);
         await EnsureWebViewAsync(tab);
         if (navigate) Navigate(tab, url);
@@ -205,35 +224,39 @@ public partial class MainWindow : Window
         var wv = new WebView2 { Visibility = Visibility.Collapsed };
         tab.WebView = wv;
         Host.Children.Add(wv);
-        await wv.EnsureCoreWebView2Async(_env);
+        if (_isPrivate)
+        {
+            var options = _env.CreateCoreWebView2ControllerOptions();
+            options.IsInPrivateModeEnabled = true;
+            await wv.EnsureCoreWebView2Async(_env, options);
+        }
+        else
+        {
+            await wv.EnsureCoreWebView2Async(_env);
+        }
         var core = wv.CoreWebView2;
-        core.Profile.PreferredTrackingPreventionLevel = _settings.BlockingEnabled
-            ? CoreWebView2TrackingPreventionLevel.Strict
-            : CoreWebView2TrackingPreventionLevel.Balanced;
+        Harden(core);
 
         core.SourceChanged += (_, _) =>
         {
-            tab.Url = core.Source;
+            tab.Url = tab.InternalPage ?? core.Source;
             if (tab == _active) RefreshChrome();
         };
         core.DocumentTitleChanged += (_, _) =>
         {
             tab.Title = core.DocumentTitle;
-            if (tab == _active) Title = $"{tab.Title} — Navegador";
+            if (!_isPrivate && tab.InternalPage is null) _app.Data.UpdateTitle(tab.Url, tab.Title);
+            if (tab == _active) Title = $"{tab.Title} — {WindowSuffix}";
         };
-        core.FaviconChanged += (_, _) => tab.FaviconUri = core.FaviconUri;
+        core.FaviconChanged += (_, _) => tab.FaviconUri = tab.InternalPage is null ? core.FaviconUri : null;
         core.IsDocumentPlayingAudioChanged += (_, _) => tab.PlayingAudio = core.IsDocumentPlayingAudio;
-        core.NavigationStarting += (_, e) =>
-        {
-            tab.TopHost = BrowserTab.HostOf(e.Uri);
-            tab.BlockedOnPage = 0;
-            tab.IsLoading = true;
-            if (tab == _active) RefreshChrome();
-        };
+        core.NavigationStarting += (_, e) => OnNavigationStarting(tab, core, e);
         core.NavigationCompleted += (_, e) => OnNavigationCompleted(tab, e);
         core.NewWindowRequested += (_, e) => OnNewWindowRequested(tab, e);
         core.ProcessFailed += (_, e) => OnProcessFailed(tab, e);
+        core.PermissionRequested += (_, e) => OnPermissionRequested(tab, e);
         core.ContainsFullScreenElementChanged += (_, _) => SetFullscreen(tab == _active && core.ContainsFullScreenElement);
+        wv.ZoomFactorChanged += (_, _) => { if (tab == _active) RefreshZoom(); };
 
         if (_settings.BlockingEnabled)
         {
@@ -245,9 +268,86 @@ public partial class MainWindow : Window
         span.End();
     }
 
+    /// <summary>Seguridad y privacidad por pestaña: lo que el navegador no usa, apagado.</summary>
+    private void Harden(CoreWebView2 core)
+    {
+        var s = core.Settings;
+        s.AreHostObjectsAllowed = false;      // ningún objeto .NET expuesto a las páginas
+        s.IsWebMessageEnabled = false;        // sin canal página→app
+        s.IsReputationCheckingRequired = true; // SmartScreen contra sitios y descargas maliciosas
+        s.IsPasswordAutosaveEnabled = false;   // no guardar contraseñas en el perfil (usá un gestor)
+        core.Profile.PreferredTrackingPreventionLevel = _settings.BlockingEnabled
+            ? CoreWebView2TrackingPreventionLevel.Strict
+            : CoreWebView2TrackingPreventionLevel.Balanced;
+    }
+
+    private void OnNavigationStarting(BrowserTab tab, CoreWebView2 core, CoreWebView2NavigationStartingEventArgs e)
+    {
+        var uri = e.Uri;
+        if (uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+        {
+            tab.InternalPage ??= InternalPages.NewTab; // p. ej. volver atrás a la página de nueva pestaña
+        }
+        else
+        {
+            tab.InternalPage = null;
+            if (_settings.HttpsFirst && HttpsUpgrade.Upgrade(uri, _app.HttpExempt) is { } https)
+            {
+                var host = BrowserTab.HostOf(uri)!;
+                if (tab.UpgradeHost == host)
+                {
+                    // Pasamos a https y el sitio nos redirigió de vuelta a http: no quiere https.
+                    _app.HttpExempt.Add(host);
+                    tab.UpgradeHost = null;
+                    _log.Event("https_fallback", ("host", host), ("reason", "redirect"));
+                }
+                else
+                {
+                    e.Cancel = true;
+                    tab.CancelledNavigationId = e.NavigationId;
+                    tab.CurrentNavigationId = e.NavigationId; // lo anterior a esto ya es viejo
+                    tab.UpgradeHost = host;
+                    tab.UpgradeFallback = uri;
+                    _log.Event("https_upgrade", ("host", host));
+                    Dispatcher.BeginInvoke(() => core.Navigate(https));
+                    return;
+                }
+            }
+        }
+        tab.CurrentNavigationId = e.NavigationId;
+        tab.TopHost = BrowserTab.HostOf(uri);
+        tab.BlockedOnPage = 0;
+        tab.IsLoading = true;
+        if (tab == _active) RefreshChrome();
+    }
+
     private void OnNavigationCompleted(BrowserTab tab, CoreWebView2NavigationCompletedEventArgs e)
     {
+        if (e.NavigationId == tab.CancelledNavigationId)
+        {
+            tab.CancelledNavigationId = null; // la http que cancelamos para ir a https: no es un error
+            return;
+        }
+        if (tab.CurrentNavigationId is { } current && e.NavigationId < current)
+            return; // navegación vieja interrumpida por una nueva (p. ej. la página de nueva pestaña)
+        if (!e.IsSuccess && tab.InternalPage is not null)
+            return; // las páginas propias no fallan: es la nueva pestaña interrumpida al escribir una dirección
         tab.IsLoading = false;
+
+        if (tab.UpgradeHost is { } upgraded)
+        {
+            var fallback = tab.UpgradeFallback;
+            tab.UpgradeHost = null;
+            tab.UpgradeFallback = null;
+            if (!e.IsSuccess && fallback is not null && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
+            {
+                _app.HttpExempt.Add(upgraded);
+                _log.Event("https_fallback", ("host", upgraded), ("reason", e.WebErrorStatus.ToString()));
+                tab.Core?.Navigate(fallback);
+                return;
+            }
+        }
+
         if (tab.SavedScroll is { } scroll)
         {
             tab.SavedScroll = null;
@@ -258,9 +358,24 @@ public partial class MainWindow : Window
             tab.RestoreSpan = null;
             span.End(e.IsSuccess);
         }
+        if (e.IsSuccess && tab.InternalPage is null && tab.Core is { } done)
+            tab.Url = done.Source; // la dirección real (con redirecciones), no la que se escribió
+        if (e.IsSuccess && !_isPrivate && tab.InternalPage is null)
+            _app.Data.AddVisit(tab.Url, tab.Title, DateTime.UtcNow);
         _log.Event("navigation_completed", ("tab_id", tab.Id), ("ok", e.IsSuccess), ("host", BrowserTab.HostOf(tab.Url)),
-            ("blocked", tab.BlockedOnPage));
+            ("blocked", tab.BlockedOnPage), ("error", e.IsSuccess ? null : e.WebErrorStatus.ToString()));
         if (tab == _active) RefreshChrome();
+    }
+
+
+    private void OnPermissionRequested(BrowserTab tab, CoreWebView2PermissionRequestedEventArgs e)
+    {
+        if (e.PermissionKind == CoreWebView2PermissionKind.Notifications && _settings.BlockNotifications)
+        {
+            e.State = CoreWebView2PermissionState.Deny;
+            _log.Event("permission_denied", ("kind", "notifications"), ("host", BrowserTab.HostOf(e.Uri)));
+        }
+        // El resto (cámara, micrófono, ubicación…) lo pregunta WebView2 con su diálogo.
     }
 
     private async void OnNewWindowRequested(BrowserTab opener, CoreWebView2NewWindowRequestedEventArgs e)
@@ -297,6 +412,20 @@ public partial class MainWindow : Window
         var core = tab.Core;
         if (core is null) return;
         tab.Url = url;
+        switch (url)
+        {
+            case InternalPages.NewTab:
+                tab.InternalPage = url;
+                tab.Title = "Nueva pestaña";
+                core.NavigateToString(InternalPages.BuildNewTab(_app.Data, _settings.SearchUrl, _isPrivate));
+                return;
+            case InternalPages.History:
+                tab.InternalPage = url;
+                tab.Title = "Historial";
+                core.NavigateToString(InternalPages.BuildHistory(_app.Data));
+                return;
+        }
+        tab.Title = url; // hasta que llegue el título real, como en otros navegadores
         try { core.Navigate(url); }
         catch (ArgumentException) { core.Navigate(_settings.SearchUrl + Uri.EscapeDataString(url)); }
     }
@@ -313,6 +442,7 @@ public partial class MainWindow : Window
                 _ = SaveScrollAsync(prev, prevCore);
                 prev.WebView!.Visibility = Visibility.Collapsed;
             }
+            CloseFind();
         }
 
         _active = tab;
@@ -341,11 +471,12 @@ public partial class MainWindow : Window
         if (tab.WebView is { } wv)
         {
             wv.Visibility = Visibility.Visible;
-            if (tab.Url != "about:blank") wv.Focus();
+            if (tab.Url != InternalPages.NewTab) wv.Focus();
         }
-        if (tab.Url == "about:blank" && !Address.IsKeyboardFocusWithin) FocusAddress();
-        Title = $"{tab.Title} — Navegador";
+        if (tab.Url == InternalPages.NewTab && !Address.IsKeyboardFocusWithin) FocusAddress();
+        Title = $"{tab.Title} — {WindowSuffix}";
         RefreshChrome();
+        RefreshZoom();
         BringIntoView(tab);
     }
 
@@ -368,7 +499,7 @@ public partial class MainWindow : Window
     {
         var index = _tabs.IndexOf(tab);
         if (index < 0) return;
-        if (tab.Url != "about:blank") _closed.Push(tab.Url);
+        if (!InternalPages.IsInternal(tab.Url)) _closed.Push(tab.Url);
         _tabs.RemoveAt(index);
         DisposeWebView(tab);
         _log.Event("close_tab", ("tab_id", tab.Id));
@@ -388,9 +519,24 @@ public partial class MainWindow : Window
     private void DisposeWebView(BrowserTab tab)
     {
         if (tab.WebView is not { } wv) return;
+        if (_findCore is not null && _findCore == tab.Core) _findCore = null;
         tab.WebView = null;
         Host.Children.Remove(wv);
         wv.Dispose();
+    }
+
+    private async Task OpenOrActivateInternalAsync(string page)
+    {
+        var existing = _tabs.FirstOrDefault(t => t.Url == page);
+        if (existing is not null)
+        {
+            await ActivateAsync(existing);
+            Navigate(existing, page); // refresca el contenido
+        }
+        else
+        {
+            await ActivateAsync(await NewTabAsync(page));
+        }
     }
 
     // ---------- Hibernación y presupuesto de RAM ----------
@@ -523,6 +669,8 @@ public partial class MainWindow : Window
 
         const double mb = 1024 * 1024;
         _lastPrivateMb = Math.Round(priv / mb, 1);
+        RefreshStatus();
+        if (_isPrivate) return; // los procesos son los mismos que los de la ventana normal: no duplicar muestras
         _log.Write(new Dictionary<string, object?>
         {
             ["type"] = "sample",
@@ -536,7 +684,6 @@ public partial class MainWindow : Window
             ["blocked_total"] = _blockedTotal,
             ["focused"] = _focusLostSinceUtc is null,
         });
-        RefreshStatus();
     }
 
     // ---------- Interfaz ----------
@@ -547,8 +694,33 @@ public partial class MainWindow : Window
         BackButton.IsEnabled = core?.CanGoBack == true;
         ForwardButton.IsEnabled = core?.CanGoForward == true;
         ReloadButton.Content = _active?.IsLoading == true ? "\uE711" : "\uE72C";
+        var url = _active?.Url;
         if (!Address.IsKeyboardFocusWithin)
-            Address.Text = _active?.Url is "about:blank" or null ? "" : _active.Url;
+            Address.Text = url is InternalPages.NewTab or null ? "" : url;
+
+        // Candado: https verde-gris, http con advertencia, páginas propias sin ícono.
+        if (url is not null && url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            LockIcon.Text = "\uE72E";
+            LockIcon.Foreground = Brushes.Gray;
+            LockIcon.ToolTip = "Conexión segura (HTTPS)";
+        }
+        else if (url is not null && url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            LockIcon.Text = "\uE7BA";
+            LockIcon.Foreground = Brushes.Orange;
+            LockIcon.ToolTip = "Conexión no segura: lo que envíes puede verse en la red";
+        }
+        else
+        {
+            LockIcon.Text = "";
+            LockIcon.ToolTip = null;
+        }
+
+        var bookmarked = url is not null && _app.Data.IsBookmarked(url);
+        StarButton.Content = bookmarked ? "\uE735" : "\uE734";
+        StarButton.Foreground = bookmarked ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(0xE8, 0xEA, 0xED));
+        StarButton.IsEnabled = url is not null && BrowserData.IsRecordable(url);
         RefreshShield();
     }
 
@@ -558,8 +730,8 @@ public partial class MainWindow : Window
         var ram = _lastPrivateMb is { } m ? $"{m:0} MB" : "…";
         MemoryText.Text = $"RAM {ram} de {_settings.RamBudgetMb} MB  ·  {_tabs.Count} pestañas  ·  {sleeping} dormidas";
         MemoryText.Foreground = _lastPrivateMb > _settings.RamBudgetMb
-            ? System.Windows.Media.Brushes.Orange
-            : (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFrom("#9AA0A6")!;
+            ? Brushes.Orange
+            : new SolidColorBrush(Color.FromRgb(0x9A, 0xA0, 0xA6));
     }
 
     private void RefreshShield()
@@ -569,6 +741,25 @@ public partial class MainWindow : Window
         ShieldText.Text = _settings.IsAllowed(host)
             ? $"\U0001F6E1 Permitido en {host}  ·  {_blockedTotal} bloqueados en total"
             : $"\U0001F6E1 {_active?.BlockedOnPage ?? 0} bloqueados en este sitio  ·  {_blockedTotal} en total";
+    }
+
+    private void RefreshZoom()
+    {
+        var z = _active?.WebView?.ZoomFactor ?? 1.0;
+        ZoomButton.Visibility = Math.Abs(z - 1.0) < 0.001 ? Visibility.Collapsed : Visibility.Visible;
+        ZoomText.Text = $"\U0001F50D {z * 100:0} %";
+    }
+
+    private void Zoom(int direction)
+    {
+        if (_active?.WebView is not { } wv) return;
+        if (direction == 0) { wv.ZoomFactor = 1.0; RefreshZoom(); return; }
+        var current = wv.ZoomFactor;
+        var next = direction > 0
+            ? ZoomSteps.FirstOrDefault(s => s > current + 0.001, ZoomSteps[^1])
+            : ZoomSteps.LastOrDefault(s => s < current - 0.001, ZoomSteps[0]);
+        wv.ZoomFactor = next;
+        RefreshZoom();
     }
 
     private void SetFullscreen(bool on)
@@ -608,6 +799,109 @@ public partial class MainWindow : Window
         await ActivateAsync(_tabs[i]);
     }
 
+    // ---------- Buscar en la página ----------
+
+    private void OpenFind()
+    {
+        if (_active?.Core is null || _active.InternalPage is not null) return;
+        FindBar.Visibility = Visibility.Visible;
+        FindBox.Focus();
+        FindBox.SelectAll();
+        if (FindBox.Text.Length > 0) _ = StartFindAsync();
+    }
+
+    private void CloseFind()
+    {
+        if (FindBar.Visibility != Visibility.Visible) return;
+        FindBar.Visibility = Visibility.Collapsed;
+        try { _findCore?.Find.Stop(); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        _findCore = null;
+        FindCount.Text = "";
+        _active?.WebView?.Focus();
+    }
+
+    private async Task StartFindAsync()
+    {
+        if (_active?.Core is not { } core || _env is null) return;
+        if (FindBox.Text.Length == 0)
+        {
+            try { core.Find.Stop(); } catch (InvalidOperationException) { }
+            FindCount.Text = "";
+            return;
+        }
+        if (_findCore != core)
+        {
+            _findCore = core;
+            core.Find.MatchCountChanged += (_, _) => UpdateFindCount(core);
+            core.Find.ActiveMatchIndexChanged += (_, _) => UpdateFindCount(core);
+        }
+        var options = _env.CreateFindOptions();
+        options.FindTerm = FindBox.Text;
+        options.SuppressDefaultFindDialog = true;
+        options.ShouldHighlightAllMatches = true;
+        try { await core.Find.StartAsync(options); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        UpdateFindCount(core);
+    }
+
+    private void UpdateFindCount(CoreWebView2 core)
+    {
+        if (core != _findCore) return;
+        var count = core.Find.MatchCount;
+        FindCount.Text = FindBox.Text.Length == 0 ? "" : count == 0 ? "Sin resultados" : $"{core.Find.ActiveMatchIndex + 1} de {count}";
+    }
+
+    private void FindBox_TextChanged(object sender, TextChangedEventArgs e) => _ = StartFindAsync();
+
+    private void FindBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            if (NativeMethods.CurrentModifiers().HasFlag(ModifierKeys.Shift)) _findCore?.Find.FindPrevious();
+            else _findCore?.Find.FindNext();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CloseFind();
+            e.Handled = true;
+        }
+    }
+
+    private void FindPrev_Click(object sender, RoutedEventArgs e) => _findCore?.Find.FindPrevious();
+    private void FindNext_Click(object sender, RoutedEventArgs e) => _findCore?.Find.FindNext();
+    private void FindClose_Click(object sender, RoutedEventArgs e) => CloseFind();
+
+    // ---------- Acciones ----------
+
+    private void ToggleBookmark()
+    {
+        if (_active is not { } tab || !BrowserData.IsRecordable(tab.Url)) return;
+        var added = _app.Data.ToggleBookmark(tab.Url, tab.Title);
+        _app.SaveData();
+        _log.Event(added ? "bookmark_added" : "bookmark_removed");
+        RefreshChrome();
+    }
+
+    private async Task ClearBrowsingDataAsync(bool confirm = true)
+    {
+        if (confirm && MessageBox.Show(this,
+                "Se borran el historial, las cookies (vas a tener que volver a iniciar sesión), la caché y los datos que guardan los sitios.\n\nLas pestañas abiertas y los favoritos quedan.",
+                "Borrar datos de navegación", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel)
+            != MessageBoxResult.OK) return;
+        var core = _active?.Core ?? _tabs.Select(t => t.Core).FirstOrDefault(c => c is not null);
+        if (core is not null) await core.Profile.ClearBrowsingDataAsync();
+        _app.Data.ClearHistory();
+        _app.SaveData();
+        _log.Event("browsing_data_cleared");
+        foreach (var t in _tabs.Where(t => t.InternalPage is not null && t.Core is not null)) Navigate(t, t.Url);
+        _active?.Core?.Reload();
+    }
+
+    private void OpenSettings() =>
+        Process.Start(new ProcessStartInfo("notepad.exe", $"\"{_app.Paths.Settings}\"") { UseShellExecute = false });
+
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var mods = NativeMethods.CurrentModifiers();
@@ -622,8 +916,18 @@ public partial class MainWindow : Window
         Func<Task>? action = null;
         if (ctrl && key == Key.T && !shift) action = OpenBlankTabAsync;
         else if (ctrl && shift && key == Key.T && _closed.TryPop(out var url)) action = async () => await ActivateAsync(await NewTabAsync(url));
+        else if (ctrl && shift && key == Key.N) _app.OpenWindow(null, isPrivate: true);
         else if (ctrl && key == Key.W && _active is { } current) action = () => CloseTabAsync(current);
         else if ((ctrl && key == Key.L) || (alt && key == Key.D) || key == Key.F6) FocusAddress();
+        else if (ctrl && key == Key.D && !shift) ToggleBookmark();
+        else if (ctrl && key == Key.H) action = () => OpenOrActivateInternalAsync(InternalPages.History);
+        else if (ctrl && key == Key.J) core?.OpenDefaultDownloadDialog();
+        else if (ctrl && key == Key.F) OpenFind();
+        else if (ctrl && key == Key.P) core?.ShowPrintUI();
+        else if (ctrl && shift && key == Key.Delete && !_isPrivate) action = () => ClearBrowsingDataAsync();
+        else if (ctrl && key is Key.OemPlus or Key.Add) Zoom(+1);
+        else if (ctrl && key is Key.OemMinus or Key.Subtract) Zoom(-1);
+        else if (ctrl && key is Key.D0 or Key.NumPad0) Zoom(0);
         else if (ctrl && key == Key.Tab) action = () => CycleTabAsync(shift ? -1 : 1);
         else if (ctrl && key >= Key.D1 && key <= Key.D8 && key - Key.D1 < _tabs.Count) { var t = _tabs[key - Key.D1]; action = () => ActivateAsync(t); }
         else if (ctrl && key == Key.D9 && _tabs.Count > 0) { var t = _tabs[^1]; action = () => ActivateAsync(t); }
@@ -643,7 +947,7 @@ public partial class MainWindow : Window
     {
         Address.Text = "";
         Address.Focus();
-        await ActivateAsync(await NewTabAsync("about:blank"));
+        await ActivateAsync(await NewTabAsync(InternalPages.NewTab));
     }
 
     private void Address_KeyDown(object sender, KeyEventArgs e)
@@ -657,7 +961,7 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.Escape)
         {
-            Address.Text = _active?.Url is "about:blank" or null ? "" : _active.Url;
+            Address.Text = _active?.Url is InternalPages.NewTab or null ? "" : _active.Url;
             _active?.WebView?.Focus();
             e.Handled = true;
         }
@@ -691,6 +995,41 @@ public partial class MainWindow : Window
         if (((FrameworkElement)sender).DataContext is BrowserTab tab) await CloseTabAsync(tab);
     }
 
+    private static BrowserTab? TabOf(object sender) => (sender as FrameworkElement)?.DataContext as BrowserTab;
+
+    private async void TabMenu_Reload(object sender, RoutedEventArgs e)
+    {
+        if (TabOf(sender) is not { } tab) return;
+        if (tab.Core is { } core) core.Reload();
+        else await ActivateAsync(tab);
+    }
+
+    private async void TabMenu_Duplicate(object sender, RoutedEventArgs e)
+    {
+        if (TabOf(sender) is { } tab) await ActivateAsync(await NewTabAsync(tab.Url));
+    }
+
+    private async void TabMenu_Sleep(object sender, RoutedEventArgs e)
+    {
+        if (TabOf(sender) is { CanSleep: true } tab)
+        {
+            await ApplyAsync(new PolicyDecision(tab.Id, HibernateAction.Discard, "manual"));
+            RefreshStatus();
+        }
+    }
+
+    private async void TabMenu_CloseOthers(object sender, RoutedEventArgs e)
+    {
+        if (TabOf(sender) is not { } keep) return;
+        foreach (var t in _tabs.Where(t => t != keep).ToList()) await CloseTabAsync(t);
+        if (_active != keep) await ActivateAsync(keep);
+    }
+
+    private async void TabMenu_Close(object sender, RoutedEventArgs e)
+    {
+        if (TabOf(sender) is { } tab) await CloseTabAsync(tab);
+    }
+
     private void TabScroll_Wheel(object sender, MouseWheelEventArgs e)
     {
         var sv = (ScrollViewer)sender;
@@ -708,16 +1047,63 @@ public partial class MainWindow : Window
         else core?.Reload();
     }
 
-    private void Settings_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("notepad.exe", $"\"{_paths.Settings}\"") { UseShellExecute = false });
+    private void Star_Click(object sender, RoutedEventArgs e) => ToggleBookmark();
+
+    private void ZoomReset_Click(object sender, RoutedEventArgs e) => Zoom(0);
 
     private void Shield_Click(object sender, RoutedEventArgs e)
     {
         if (_active?.TopHost is not { } host || !_settings.BlockingEnabled) return;
         var allowed = _settings.ToggleAllowed(host);
-        _settings.Save(_paths.Settings);
+        _settings.Save(_app.Paths.Settings);
         _log.Event(allowed ? "site_allowed" : "site_blocked", ("host", host));
         _active.Core?.Reload();
         RefreshShield();
+    }
+
+    private void Menu_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = MenuButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        MenuItem Item(string header, string? gesture, Action onClick, bool enabled = true)
+        {
+            var mi = new MenuItem { Header = header, InputGestureText = gesture ?? "", IsEnabled = enabled };
+            mi.Click += (_, _) => onClick();
+            return mi;
+        }
+        var core = _active?.Core;
+        var isSite = core is not null && _active!.InternalPage is null;
+
+        menu.Items.Add(Item("Nueva pestaña", "Ctrl+T", () => _ = OpenBlankTabAsync()));
+        menu.Items.Add(Item("Nueva ventana privada", "Ctrl+Shift+N", () => _app.OpenWindow(null, isPrivate: true)));
+        menu.Items.Add(new Separator());
+
+        var favorites = new MenuItem { Header = "Favoritos" };
+        var url = _active?.Url;
+        var canBookmark = url is not null && BrowserData.IsRecordable(url);
+        favorites.Items.Add(Item(url is not null && _app.Data.IsBookmarked(url) ? "Quitar esta página" : "Agregar esta página",
+            "Ctrl+D", ToggleBookmark, canBookmark));
+        if (_app.Data.Bookmarks.Count > 0) favorites.Items.Add(new Separator());
+        foreach (var b in _app.Data.Bookmarks)
+        {
+            var target = b.Url;
+            favorites.Items.Add(Item(b.Title.Length > 60 ? b.Title[..60] + "…" : b.Title, null, () => { if (_active is { } t) Navigate(t, target); }));
+        }
+        menu.Items.Add(favorites);
+        menu.Items.Add(Item("Historial", "Ctrl+H", () => _ = OpenOrActivateInternalAsync(InternalPages.History)));
+        menu.Items.Add(Item("Descargas", "Ctrl+J", () => core?.OpenDefaultDownloadDialog(), core is not null));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Acercar", "Ctrl++", () => Zoom(+1), core is not null));
+        menu.Items.Add(Item("Alejar", "Ctrl+-", () => Zoom(-1), core is not null));
+        menu.Items.Add(Item("Tamaño normal", "Ctrl+0", () => Zoom(0), core is not null));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Buscar en la página", "Ctrl+F", OpenFind, isSite));
+        menu.Items.Add(Item("Imprimir", "Ctrl+P", () => core?.ShowPrintUI(), isSite));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Borrar datos de navegación…", "Ctrl+Shift+Supr", () => _ = ClearBrowsingDataAsync(), !_isPrivate));
+        menu.Items.Add(Item("Ajustes (se aplican al reiniciar)", null, OpenSettings));
+        menu.Items.Add(Item("Abrir carpeta de datos y registros", null,
+            () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_app.Paths.Root}\"") { UseShellExecute = false })));
+        menu.IsOpen = true;
+        _openMenu = menu;
     }
 }
