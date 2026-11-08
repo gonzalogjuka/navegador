@@ -39,6 +39,11 @@ public partial class MainWindow : Window
     private bool _applying;
     private long _blockedTotal;
     private double? _lastPrivateMb;
+    private MemoryReading? _lastMemory;
+    private BudgetDiscard? _lastBudgetDiscard;
+    private Dictionary<int, TimeSpan> _lastCpu = [];
+    private DateTime? _lastCpuAtUtc;
+    private bool _closing;
 
     private DateTime? _focusLostSinceUtc;
     private bool _activeLowered;
@@ -76,6 +81,20 @@ public partial class MainWindow : Window
     }
 
     private string WindowSuffix => _isPrivate ? "Navegador (privada)" : "Navegador";
+
+    public bool IsPrivate => _isPrivate;
+
+    /// <summary>Pedido de otro arranque (acceso directo, link desde otra app): pestaña nueva y ventana al frente.</summary>
+    public async void OpenFromOutside(string? url, bool bringToFront)
+    {
+        if (bringToFront)
+        {
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            Activate();
+        }
+        if (url is not null && _env is not null)
+            await ActivateAsync(await NewTabAsync(UrlInput.Resolve(url, _settings.SearchUrl)));
+    }
 
     // ---------- Arranque y cierre ----------
 
@@ -116,6 +135,9 @@ public partial class MainWindow : Window
 
         span.End();
         _log.Event("startup_done", ("tabs", _tabs.Count), ("blocklist_domains", _blockList.Domains.Count), ("private", _isPrivate));
+        // Abierta sin foco (detrás de otra app, o en las pruebas ocultas): nunca llega Deactivated, así que la espera
+        // de "foco perdido" arranca acá.
+        if (!IsActive) OnDeactivated(this, EventArgs.Empty);
         _tick.Start();
         Sample();
         if (_app.TakeAutomationScript() is { } script) await RunAutomationAsync(script);
@@ -127,6 +149,7 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        _closing = true;
         _tick.Stop();
         SaveSession();
         _log.Event("shutdown", ("tabs", _tabs.Count), ("blocked_total", _blockedTotal), ("private", _isPrivate));
@@ -591,7 +614,7 @@ public partial class MainWindow : Window
         {
             var decisions = HibernationPolicy.Decide(
                 _tabs.Select(t => t.Snapshot()).ToList(), DateTime.UtcNow, _settings,
-                _focusLostSinceUtc, sampled ? _lastPrivateMb : null, _activeLowered);
+                _focusLostSinceUtc, sampled ? _lastMemory : null, _activeLowered, _lastBudgetDiscard);
             foreach (var d in decisions) await ApplyAsync(d);
 
             var focusTriggered = _focusLostSinceUtc is { } since
@@ -625,6 +648,9 @@ public partial class MainWindow : Window
             case HibernateAction.Suspend:
             {
                 var span = _log.StartSpan("suspend_tab", ("tab_id", tab.Id), ("reason", d.Reason));
+                // Suspendida no contesta scripts y no se puede escribir en ella (no está a la vista): se mira ahora si
+                // tiene algo escrito y eso vale hasta que vuelva.
+                tab.UnsavedInputWhenSuspended = await HasUnsavedInputAsync(core);
                 core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
                 var ok = false;
                 try { ok = await core.TrySuspendAsync(); }
@@ -638,14 +664,57 @@ public partial class MainWindow : Window
             case HibernateAction.Discard:
             {
                 if (tab.IsActive) return;
+                if (d.Reason is "idle" or "budget"
+                    && (tab.State == TabState.Suspended ? tab.UnsavedInputWhenSuspended : await HasUnsavedInputAsync(core)))
+                {
+                    // Descartar borraría lo escrito. Se reintenta en 10 min; mientras, la política elige otra.
+                    tab.KeepAliveUntilUtc = DateTime.UtcNow.AddMinutes(10);
+                    _log.Event("discard_skipped", ("tab_id", tab.Id), ("reason", d.Reason), ("why", "unsaved_input"));
+                    return;
+                }
                 var span = _log.StartSpan("discard_tab", ("tab_id", tab.Id), ("reason", d.Reason));
                 DisposeWebView(tab);
                 tab.State = TabState.Discarded;
                 span.End();
                 if (d.Reason == "budget")
-                    _log.Event("budget_discard", ("tab_id", tab.Id), ("private_mb", _lastPrivateMb), ("budget_mb", _settings.RamBudgetMb));
+                {
+                    _lastBudgetDiscard = new BudgetDiscard(DateTime.UtcNow, _lastMemory?.TotalMb ?? 0);
+                    _log.Event("budget_discard", ("tab_id", tab.Id), ("private_mb", _lastMemory?.TotalMb),
+                        ("renderer_mb", _lastMemory?.RendererMb), ("budget_mb", _settings.RamBudgetMb));
+                }
                 break;
             }
+        }
+    }
+
+    /// <summary>
+    /// ¿La página tiene algo escrito sin enviar? Campos de texto distintos de su valor inicial, el editor enfocado con
+    /// texto, o un aviso de "salir de la página" por propiedad. Sólo el documento principal (los iframes de otro origen
+    /// no se pueden leer). Si la página no contesta en 1,5 s se la trata como que sí: no se pierde nada por esperar.
+    /// </summary>
+    private static async Task<bool> HasUnsavedInputAsync(CoreWebView2 core)
+    {
+        const string script = """
+            (() => {
+              const skip = ['hidden','submit','button','reset','image','file','password','checkbox','radio','range','color'];
+              for (const e of document.querySelectorAll('input,textarea')) {
+                if (e.disabled || e.readOnly || skip.includes(e.type)) continue;
+                if (e.value.trim() && e.value !== e.defaultValue) return true;
+              }
+              const a = document.activeElement;
+              if (a && a.isContentEditable && a.textContent.trim()) return true;
+              return typeof window.onbeforeunload === 'function';
+            })()
+            """;
+        try
+        {
+            var run = core.ExecuteScriptAsync(script);
+            if (await Task.WhenAny(run, Task.Delay(1500)) != run) return true;
+            return await run == "true";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return false; // el WebView ya no existe: no hay nada que perder
         }
     }
 
@@ -678,19 +747,29 @@ public partial class MainWindow : Window
         catch (ArgumentException) { return null; }
     }
 
-    /// <summary>Memoria de todos los procesos del navegador: el propio y los de WebView2 de este entorno.</summary>
+    /// <summary>
+    /// Memoria y CPU de todos los procesos del navegador: el propio y los de WebView2 de este entorno. La CPU es el
+    /// porcentaje de la máquina (todos los núcleos = 100 %) entre esta muestra y la anterior.
+    /// </summary>
     private void Sample()
     {
         if (_env is null) return;
         var pids = new HashSet<int> { Environment.ProcessId };
+        var renderers = new HashSet<int>();
         try
         {
-            foreach (var info in _env.GetProcessInfos()) pids.Add(info.ProcessId);
+            foreach (var info in _env.GetProcessInfos())
+            {
+                pids.Add(info.ProcessId);
+                if (info.Kind == CoreWebView2ProcessKind.Renderer) renderers.Add(info.ProcessId);
+            }
         }
         catch (System.Runtime.InteropServices.COMException) { }
 
-        long priv = 0, rss = 0;
+        long priv = 0, rss = 0, rendererPriv = 0;
         var alive = 0;
+        var cpu = new Dictionary<int, TimeSpan>();
+        TimeSpan cpuDelta = TimeSpan.Zero, rendererCpuDelta = TimeSpan.Zero;
         foreach (var pid in pids)
         {
             try
@@ -698,14 +777,34 @@ public partial class MainWindow : Window
                 using var p = Process.GetProcessById(pid);
                 priv += p.PrivateMemorySize64;
                 rss += p.WorkingSet64;
+                if (renderers.Contains(pid)) rendererPriv += p.PrivateMemorySize64;
+                cpu[pid] = p.TotalProcessorTime;
+                if (_lastCpu.TryGetValue(pid, out var before))
+                {
+                    var delta = cpu[pid] - before;
+                    cpuDelta += delta;
+                    if (renderers.Contains(pid)) rendererCpuDelta += delta;
+                }
                 alive++;
             }
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
+            catch (System.ComponentModel.Win32Exception) { }
         }
+        var now = DateTime.UtcNow;
+        double? cpuPct = null, rendererCpuPct = null;
+        if (_lastCpuAtUtc is { } at && (now - at).TotalSeconds > 0)
+        {
+            var capacity = (now - at).TotalMilliseconds * Environment.ProcessorCount;
+            cpuPct = Math.Round(cpuDelta.TotalMilliseconds / capacity * 100, 2);
+            rendererCpuPct = Math.Round(rendererCpuDelta.TotalMilliseconds / capacity * 100, 2);
+        }
+        _lastCpu = cpu;
+        _lastCpuAtUtc = now;
 
         const double mb = 1024 * 1024;
         _lastPrivateMb = Math.Round(priv / mb, 1);
+        _lastMemory = new MemoryReading(_lastPrivateMb.Value, Math.Round(rendererPriv / mb, 1));
         RefreshStatus();
         if (_isPrivate) return; // los procesos son los mismos que los de la ventana normal: no duplicar muestras
         _log.Write(new Dictionary<string, object?>
@@ -714,6 +813,9 @@ public partial class MainWindow : Window
             ["app_procs"] = alive,
             ["app_rss_mb"] = Math.Round(rss / mb, 1),
             ["app_private_mb"] = _lastPrivateMb,
+            ["renderer_private_mb"] = _lastMemory.Value.RendererMb,
+            ["cpu_pct"] = cpuPct,
+            ["renderer_cpu_pct"] = rendererCpuPct,
             ["tabs"] = _tabs.Count,
             ["tabs_live"] = _tabs.Count(t => t.State == TabState.Live),
             ["tabs_suspended"] = _tabs.Count(t => t.State == TabState.Suspended),
@@ -944,6 +1046,14 @@ public partial class MainWindow : Window
     private void OpenSettings() =>
         Process.Start(new ProcessStartInfo("notepad.exe", $"\"{_app.Paths.Settings}\"") { UseShellExecute = false });
 
+    /// <summary>Registra el navegador (HKCU) y abre Configuración en su página: ahí se elige como predeterminado.</summary>
+    private void MakeDefaultBrowser()
+    {
+        DefaultBrowser.Register(Environment.ProcessPath!);
+        _log.Event("default_browser_registered");
+        Process.Start(new ProcessStartInfo(DefaultBrowser.SettingsUri) { UseShellExecute = true });
+    }
+
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var mods = NativeMethods.CurrentModifiers();
@@ -1160,6 +1270,8 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Ajustes (se aplican al reiniciar)", null, OpenSettings));
         menu.Items.Add(Item("Abrir carpeta de datos y registros", null,
             () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_app.Paths.Root}\"") { UseShellExecute = false })));
+        if (!_isPrivate)
+            menu.Items.Add(Item("Hacer navegador predeterminado…", null, MakeDefaultBrowser));
         if (_app.AutomationScript is not null)
         {
             // Prueba automática: el menú no se abre (Windows lo traería al borde de la pantalla); se dibuja en la captura.

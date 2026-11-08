@@ -1,0 +1,21 @@
+# 20 URLs fijas para comparar memoria (sin login, sin audio/video automático). Una por línea; '#' comenta.
+https://es.wikipedia.org/wiki/Buenos_Aires
+https://github.com/microsoft/vscode
+https://www.bbc.com/news
+https://stackoverflow.com/questions/231767/what-does-the-yield-keyword-do-in-python
+https://developer.mozilla.org/es/docs/Web/JavaScript
+https://www.lanacion.com.ar/
+https://docs.python.org/3/tutorial/index.html
+https://old.reddit.com/r/argentina/
+https://listado.mercadolibre.com.ar/notebook
+https://www.infobae.com/
+https://es.wikipedia.org/wiki/Jorge_Luis_Borges
+https://github.com/torvalds/linux
+https://www.clarin.com/
+https://learn.microsoft.com/es-es/dotnet/csharp/
+https://stackoverflow.com/questions/927358/how-do-i-undo-the-most-recent-local-commits-in-git
+https://www.theguardian.com/international
+https://news.ycombinator.com/
+https://www.pagina12.com.ar/
+https://developer.mozilla.org/en-US/docs/Web/CSS/grid
+https://www.npmjs.com/package/react

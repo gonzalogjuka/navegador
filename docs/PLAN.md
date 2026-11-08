@@ -14,7 +14,7 @@ Motor: WebView2 (el Chromium que ya trae Windows) + .NET 8 WPF. Lo nuevo está e
 | Innovación | Implementación | Cómo se mide |
 |---|---|---|
 | Hibernación por foco e inactividad | Política pura (`HibernationPolicy`) evaluada cada 1 s (la memoria se mide cada 5 s). Pestaña de fondo inactiva `SuspendAfterSeconds` → `MemoryUsageTargetLevel=Low` + `TrySuspendAsync`. Inactiva `DiscardAfterMinutes` → se destruye el WebView2 y se guarda URL, título y scroll. Si la ventana pierde el foco `FocusLostSeconds`, se hace lo mismo con todas las de fondo y la activa pasa a memoria baja. No se toca la pestaña que reproduce audio. | Eventos `focus_lost`→`hibernate_done`, `focus_gained`→`tab_active_ready`; spans `suspend_tab`, `discard_tab`, `restore_tab` |
-| Presupuesto de RAM | Cada muestra suma la memoria privada de los procesos de WebView2 del navegador (`GetProcessInfos`) más el proceso propio. Si supera `RamBudgetMb`, se descarta la pestaña de fondo usada hace más tiempo, una por ciclo. | `sample.app_private_mb`, evento `budget_discard` |
+| Presupuesto de RAM | Cada muestra suma la memoria privada de los procesos de WebView2 del navegador (`GetProcessInfos`) más el proceso propio. Si supera `RamBudgetMb`, descarta de una vez las pestañas de fondo menos usadas que hagan falta (memoria de renderers ÷ pestañas vivas = lo que ocupa cada una) y espera 15 s a que se libere, salvo que siga subiendo. Se salvan las `BudgetKeepRecentTabs` (2) usadas más recientemente si fue en los últimos `BudgetKeepRecentMinutes` (3) y las que tienen un formulario escrito sin enviar. | `sample.app_private_mb`, `sample.renderer_private_mb`, eventos `budget_discard`, `discard_skipped` |
 | Un proceso por sitio | Un único `CoreWebView2Environment` compartido con `--process-per-site`: todas las pestañas del mismo sitio comparten renderer. | `sample.app_procs` con N pestañas del mismo sitio |
 | Bloqueo nativo de rastreo y publicidad | Dos capas: prevención de rastreo de Chromium en `Strict` y lista propia de dominios (`blocklist.txt`). Cada dominio se registra como filtro de WebView2, así que el evento sólo salta para peticiones bloqueables y las normales no pasan por código nuestro. | `sample.blocked_total`, contador en la barra de estado |
 
@@ -31,6 +31,10 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 | Sesión liviana | 3 pestañas guardadas: al reabrir carga sólo la activa; las otras 2 quedan descartadas. |
 | Foco | `focus_lost`→`hibernate_done` 2.2–2.7 s con espera configurada de 2 s. |
 | Bloqueo | 2–11 peticiones de rastreo bloqueadas por página en sitios de noticias. |
+| Tope de RAM (0.4.0) | 9 sitios, tope 700 MB: antes descartaba de a una cada 5 s (8 de 18 muestras sobre el tope); de a varias, 4 de 18. Alternando 2 pestañas con tope 450 MB: antes 14 descartes y 12 recargas (6,2 s) sin bajar la memoria (528 contra 533 MB promedio); ahora 0 y 0. Contra: tras abrir muchas pestañas de golpe protege las 2 últimas y puede quedar por encima del tope hasta 3 min (9 sitios: 843 MB con tope 700). |
+| Formularios (0.4.0) | `tools/smoke/formulario.txt`: con tope 128 MB, la pestaña con texto escrito no se descarta (`discard_skipped`) y el texto sigue al volver; las demás sí. |
+| CPU (0.4.0) | `tools/smoke/cpu-suspendida.txt`: pestaña con un worker en bucle = 16,5 % de la máquina (un núcleo de 6) activa y de fondo; suspendida 0 %; al volver, 16 %. Una pestaña de fondo no suspendida sigue gastando CPU hasta que pasa `SuspendAfterSeconds`. |
+| Instancia única (0.4.0) | Segundo arranque con URL, con `--private` y con un `.html`: le pasa el pedido a la instancia abierta y termina en 202–222 ms; un solo log; la pestaña abre (`file:///…x.html`, título leído). |
 | Sólo con tests unitarios | No dormir la pestaña que suena (`HibernationPolicy`): no se probó con audio real para no hacer ruido en la PC. Pantalla completa (F11 / videos): sin probar. |
 
 ## Fases
@@ -41,10 +45,11 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 | 1 | Navegador usable: pestañas, barra de direcciones, atajos, ventanas nuevas como pestañas, pantalla completa, sesión, acceso directo | Hecho (0.1.0) |
 | 2 | Las cuatro innovaciones con log de métricas y barra de estado (RAM / presupuesto / dormidas / bloqueados) | Hecho (0.1.0) |
 | 3 | Uso real del usuario → leer logs → ajustar umbrales y arreglar lo que falle | Iterativo |
-| 4 | Comparación formal contra Chrome con 20 pestañas (mismo set de URLs, misma duración) | Pendiente |
+| 4 | Comparación formal contra Chrome y Edge con 20 pestañas (mismo set de URLs, misma duración): `tools/compare/` | Arnés listo (0.4.0); corrida completa programada con `cuando_libre.py` para cuando la PC esté libre. Prueba corta de validación (5 pestañas, 2 min, versión 0.3.2, PC con carga): 0,81 de Chrome y 1,44 de Edge — sin descartes todavía y con Chrome/Edge sin ventana, así que no es el resultado de la fase |
 | 5a | Controles: menú ⋮, favoritos (estrella, Ctrl+D), historial (about:history), página de nueva pestaña, buscar en la página, zoom, imprimir, descargas (diálogo de WebView2), menú de pestaña (recargar, duplicar, dormir ahora, cerrar otras), ventana privada | Hecho (0.2.0) |
 | 5b | Seguridad y privacidad: ver tabla abajo | Hecho (0.2.0) |
-| 5c | Ajustes con interfaz (hoy: settings.json), navegador predeterminado, una sola instancia, importar favoritos de Chrome/Edge, GPC | Pendiente, según uso |
+| 5c | Una sola instancia y registro como navegador predeterminado | Hecho (0.4.0) |
+| 5d | Ajustes con interfaz (hoy: settings.json), importar favoritos de Chrome/Edge, segunda ventana normal (Ctrl+N), sugerencias en la barra de direcciones, GPC | Pendiente, según uso |
 
 ## Seguridad y privacidad (0.2.0)
 

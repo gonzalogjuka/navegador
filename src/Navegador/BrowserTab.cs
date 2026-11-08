@@ -21,6 +21,10 @@ public sealed class BrowserTab : INotifyPropertyChanged
     public string? TopHost { get; set; }
     public DateTime LastActiveUtc { get; set; } = DateTime.UtcNow;
     public bool PlayingAudio { get; set; }
+    /// <summary>Hasta cuándo no se descarta: tenía un formulario escrito sin enviar la última vez que se intentó.</summary>
+    public DateTime KeepAliveUntilUtc { get; set; }
+    /// <summary>Si tenía un formulario escrito sin enviar cuando se suspendió (suspendida no contesta scripts).</summary>
+    public bool UnsavedInputWhenSuspended { get; set; }
     public int BlockedOnPage { get; set; }
     /// <summary>CoreWebView2 o null si no hay WebView o su proceso murió (el getter de WebView2 tira en ese caso).</summary>
     public Microsoft.Web.WebView2.Core.CoreWebView2? Core
@@ -60,7 +64,7 @@ public sealed class BrowserTab : INotifyPropertyChanged
     /// <summary>"Dormir ahora" del menú de la pestaña: no aplica a la activa ni a una ya descartada.</summary>
     public bool CanSleep => !_isActive && _state != TabState.Discarded;
 
-    public TabSnapshot Snapshot() => new(Id, IsActive, State, LastActiveUtc, PlayingAudio);
+    public TabSnapshot Snapshot() => new(Id, IsActive, State, LastActiveUtc, PlayingAudio, KeepAliveUntilUtc > DateTime.UtcNow);
 
     public static string? HostOf(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var u) && !string.IsNullOrEmpty(u.Host) ? u.Host.ToLowerInvariant() : null;

@@ -28,7 +28,7 @@ public partial class MainWindow
     /// <summary>Sólo la pestaña activa y visible: una oculta no se dibuja y la foto saldría en blanco.</summary>
     private async Task CaptureSnapshotAsync(BrowserTab tab)
     {
-        if (_isPrivate || tab != _active || tab.RevealPending || tab.InternalPage is not null
+        if (_closing || _isPrivate || tab != _active || tab.RevealPending || tab.InternalPage is not null
             || tab.WebView?.Visibility != Visibility.Visible || tab.Core is not { } core) return;
         await SaveScrollAsync(tab, core); // la foto y el scroll guardado tienen que coincidir
         var name = tab.SnapshotFile ?? SnapshotFiles.NewName();
@@ -38,6 +38,7 @@ public partial class MainWindow
             Directory.CreateDirectory(_app.Paths.Snapshots);
             using var ms = new MemoryStream();
             await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Jpeg, ms);
+            if (_closing) return; // la ventana se cerró mientras se sacaba: la sesión ya se guardó sin esta foto
             if (ms.Length == 0 || !_tabs.Contains(tab)) { span.End(false); return; }
             var tmp = SnapshotPath(name) + ".tmp";
             await File.WriteAllBytesAsync(tmp, ms.ToArray());

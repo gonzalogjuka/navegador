@@ -9,6 +9,12 @@ public sealed class Settings
     public int SuspendAfterSeconds { get; set; } = 60;
     public int DiscardAfterMinutes { get; set; } = 15;
     public int FocusLostSeconds { get; set; } = 10;
+    /// <summary>
+    /// El tope de RAM no descarta las BudgetKeepRecentTabs pestañas de fondo usadas más recientemente si las usaste en
+    /// los últimos BudgetKeepRecentMinutes: evita descartar y recargar en bucle la pestaña a la que volvés.
+    /// </summary>
+    public int BudgetKeepRecentTabs { get; set; } = 2;
+    public int BudgetKeepRecentMinutes { get; set; } = 3;
     public bool BlockingEnabled { get; set; } = true;
     public string SearchUrl { get; set; } = "https://www.google.com/search?q=";
     /// <summary>Sitios (host de la pestaña) donde no se bloquea nada.</summary>
@@ -62,6 +68,8 @@ public sealed class Settings
         if (SuspendAfterSeconds < 1) SuspendAfterSeconds = d.SuspendAfterSeconds;
         if (DiscardAfterMinutes < 1) DiscardAfterMinutes = d.DiscardAfterMinutes;
         if (FocusLostSeconds < 0) FocusLostSeconds = d.FocusLostSeconds;
+        if (BudgetKeepRecentMinutes < 0) BudgetKeepRecentMinutes = d.BudgetKeepRecentMinutes;
+        if (BudgetKeepRecentTabs < 0) BudgetKeepRecentTabs = d.BudgetKeepRecentTabs;
         if (string.IsNullOrWhiteSpace(SearchUrl)) SearchUrl = d.SearchUrl;
         BrowserArguments ??= "";
         AllowSites ??= [];

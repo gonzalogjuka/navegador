@@ -52,13 +52,14 @@ public class UrlInputTests
 public class HibernationPolicyTests
 {
     private static readonly DateTime Now = new(2026, 11, 7, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly Settings S = new() { SuspendAfterSeconds = 60, DiscardAfterMinutes = 15, FocusLostSeconds = 10, RamBudgetMb = 1000 };
+    private static readonly Settings S = new() { SuspendAfterSeconds = 60, DiscardAfterMinutes = 15, FocusLostSeconds = 10, RamBudgetMb = 1000, BudgetKeepRecentMinutes = 3 };
 
-    private static TabSnapshot Tab(int id, double idleSeconds, TabState state = TabState.Live, bool active = false, bool audio = false) =>
-        new(id, active, state, Now.AddSeconds(-idleSeconds), audio);
+    private static TabSnapshot Tab(int id, double idleSeconds, TabState state = TabState.Live, bool active = false, bool audio = false, bool keep = false) =>
+        new(id, active, state, Now.AddSeconds(-idleSeconds), audio, keep);
 
-    private static List<PolicyDecision> Decide(TabSnapshot[] tabs, DateTime? focusLost = null, double? mem = null, bool lowered = false) =>
-        HibernationPolicy.Decide(tabs, Now, S, focusLost, mem, lowered);
+    private static List<PolicyDecision> Decide(TabSnapshot[] tabs, DateTime? focusLost = null, double? mem = null, bool lowered = false,
+        double renderer = 0, BudgetDiscard? lastBudget = null) =>
+        HibernationPolicy.Decide(tabs, Now, S, focusLost, mem is { } m ? new MemoryReading(m, renderer) : null, lowered, lastBudget);
 
     [Fact]
     public void Background_tab_sleeps_after_idle_threshold_not_before()
@@ -97,14 +98,56 @@ public class HibernationPolicyTests
     [Fact]
     public void Over_budget_discards_least_recently_used_background_tab()
     {
-        var d = Decide([Tab(1, 0, active: true), Tab(2, 30), Tab(3, 120, TabState.Suspended), Tab(4, 10)], mem: 1001);
-        Assert.Equal([new PolicyDecision(3, HibernateAction.Discard, "budget")], d);
+        var d = Decide([Tab(1, 0, active: true), Tab(2, 300), Tab(3, 600, TabState.Suspended), Tab(4, 400)], mem: 1001);
+        Assert.Equal([new PolicyDecision(3, HibernateAction.Discard, "budget")], d.Where(x => x.Action == HibernateAction.Discard));
+    }
+
+    [Fact]
+    public void Far_over_budget_discards_enough_tabs_at_once()
+    {
+        // 5 pestañas vivas con 1000 MB de renderers = 200 MB cada una; 450 MB de más → hacen falta 3.
+        TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 840), Tab(3, 780), Tab(4, 720), Tab(5, 660)];
+        var d = Decide(tabs, mem: 1450, renderer: 1000);
+        Assert.Equal([2, 3, 4], d.Where(x => x.Reason == "budget").Select(x => x.TabId).Order());
+    }
+
+    [Fact]
+    public void Budget_never_discards_recently_used_or_keep_alive_tabs()
+    {
+        // La pestaña de la que recién saliste (hace 1 min) y la que tiene un formulario escrito se quedan, aunque sobre memoria.
+        var d = Decide([Tab(1, 0, active: true), Tab(2, 60), Tab(3, 600, keep: true)], mem: 5000, renderer: 3000);
+        Assert.Empty(d.Where(x => x.Action == HibernateAction.Discard));
+    }
+
+    [Fact]
+    public void Burst_of_recent_tabs_only_protects_the_two_most_recent()
+    {
+        // Abriste 5 pestañas en el último minuto: se salvan las 2 últimas que miraste, las otras 3 se pueden descartar.
+        TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 50), Tab(3, 40), Tab(4, 30), Tab(5, 20), Tab(6, 10)];
+        var d = Decide(tabs, mem: 5000, renderer: 3000);
+        Assert.Equal([2, 3, 4], d.Where(x => x.Reason == "budget").Select(x => x.TabId).Order());
+    }
+
+    [Fact]
+    public void Keep_alive_tab_is_only_suspended_when_idle_for_long()
+    {
+        var d = Decide([Tab(1, 0, active: true), Tab(2, 20 * 60, keep: true)]);
+        Assert.Equal([new PolicyDecision(2, HibernateAction.Suspend, "idle")], d);
+    }
+
+    [Fact]
+    public void Budget_waits_cooldown_unless_memory_keeps_rising()
+    {
+        TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 600, TabState.Suspended)];
+        Assert.Empty(Decide(tabs, mem: 2000, lastBudget: new(Now.AddSeconds(-14), 2000)));
+        Assert.Single(Decide(tabs, mem: 2000, lastBudget: new(Now.AddSeconds(-15), 2000)));
+        Assert.Single(Decide(tabs, mem: 2100, lastBudget: new(Now.AddSeconds(-5), 2000))); // se siguen cargando páginas
     }
 
     [Fact]
     public void Budget_victim_skips_tabs_already_discarded_by_idle_rule()
     {
-        var d = Decide([Tab(1, 0, active: true), Tab(2, 20 * 60), Tab(3, 30)], mem: 2000);
+        var d = Decide([Tab(1, 0, active: true), Tab(2, 20 * 60), Tab(3, 300)], mem: 2000);
         Assert.Contains(new PolicyDecision(2, HibernateAction.Discard, "idle"), d);
         Assert.Contains(new PolicyDecision(3, HibernateAction.Discard, "budget"), d);
     }

@@ -5,6 +5,7 @@ __pycache__/
 .tmp/
 logs/
 *.jsonl
+tools/compare/resultados/*.log
 
 # .NET
 bin/

@@ -4,13 +4,22 @@ using Process = System.Diagnostics.Process;
 
 namespace Navegador;
 
-/// <summary>Estado compartido por todas las ventanas (la normal y las privadas).</summary>
-public sealed class AppServices(AppPaths paths, Settings settings, BlockList blockList, EventLog log, BrowserData data)
+/// <summary>
+/// Estado compartido por todas las ventanas (la normal y las privadas).
+/// El log se abre recién con la primera ventana normal (o con --automation): una corrida sólo privada no deja archivo.
+/// </summary>
+public sealed class AppServices(AppPaths paths, Settings settings, BlockList blockList, Func<EventLog> openLog, BrowserData data)
 {
     public AppPaths Paths { get; } = paths;
     public Settings Settings { get; } = settings;
     public BlockList BlockList { get; } = blockList;
-    public EventLog Log { get; } = log;
+    public EventLog Log { get; private set; } = EventLog.Off;
+
+    public void EnsureLog()
+    {
+        if (Log == EventLog.Off) Log = openLog();
+    }
+
     /// <summary>Favoritos e historial. Las ventanas privadas no los leen ni los escriben.</summary>
     public BrowserData Data { get; } = data;
     /// <summary>Hosts sin HTTPS detectados en esta corrida por las ventanas normales (HTTPS primero los deja en http).</summary>
@@ -53,14 +62,23 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
     /// de uso; la navegación InPrivate nunca llega a disco). Normalmente WebView2 ya las borró al cerrar la última ventana
     /// privada; esto cubre un cierre forzado. Se llama al arrancar, antes de crear ningún WebView2.
     /// </summary>
-    public void DeletePrivateProfiles()
+    public void DeletePrivateProfiles() => DeletePrivateProfiles(attempts: 1);
+
+    /// <param name="attempts">Intentos por carpeta, cada 300 ms: al salir, algún proceso hijo de WebView2 puede soltar
+    /// los archivos un poco después que el proceso principal.</param>
+    private void DeletePrivateProfiles(int attempts)
     {
         foreach (var dir in Paths.PrivateProfileDirs().ToList())
         {
-            try { Directory.Delete(dir, recursive: true); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            for (var i = 1; ; i++)
             {
-                Log.Event("error", ("where", "delete_private_profile"), ("message", ex.Message));
+                try { Directory.Delete(dir, recursive: true); break; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    if (i < attempts) { Thread.Sleep(300); continue; }
+                    Log.Event("error", ("where", "delete_private_profile"), ("message", ex.Message), ("attempts", i));
+                    break;
+                }
             }
         }
     }
@@ -74,15 +92,20 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
         if (!PrivateWindowOpened) return;
         if (BrowserProcessId > 0)
         {
-            try { using var p = Process.GetProcessById(BrowserProcessId); p.WaitForExit(5000); }
+            try { using var p = Process.GetProcessById(BrowserProcessId); p.WaitForExit(10_000); }
             catch (ArgumentException) { } // ya terminó
         }
-        DeletePrivateProfiles();
+        DeletePrivateProfiles(attempts: 20);
     }
 
     public MainWindow OpenWindow(string? startUrl, bool isPrivate)
     {
-        if (isPrivate) PrivateWindowOpened = true; else NormalWindowOpened = true;
+        if (isPrivate) PrivateWindowOpened = true;
+        else
+        {
+            NormalWindowOpened = true;
+            EnsureLog();
+        }
         var w = new MainWindow(this, startUrl, isPrivate);
         if (AutomationScript is not null)
         {
@@ -96,5 +119,19 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
         }
         w.Show();
         return w;
+    }
+
+    /// <summary>
+    /// Pedido de otro arranque (doble clic en el acceso directo, un link desde otra app): --private abre una ventana
+    /// privada; si no, la dirección va a una pestaña nueva de la ventana normal (que se abre si no había).
+    /// </summary>
+    public void HandleRequest(SingleInstance.Request request)
+    {
+        Log.Event("instance_request", ("private", request.Private), ("has_url", request.Url is not null));
+        if (request.Private) { OpenWindow(request.Url, isPrivate: true); return; }
+        if (System.Windows.Application.Current.Windows.OfType<MainWindow>().LastOrDefault(m => !m.IsPrivate) is { } w)
+            w.OpenFromOutside(request.Url, bringToFront: AutomationScript is null);
+        else
+            OpenWindow(request.Url, isPrivate: false);
     }
 }

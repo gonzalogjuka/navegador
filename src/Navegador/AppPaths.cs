@@ -43,6 +43,16 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     internal static partial short GetKeyState(int vKey);
 
+    internal const int AsfwAny = -1;
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AllowSetForegroundWindow(int dwProcessId);
+
+    /// <summary>Avisa al Explorador que cambiaron las asociaciones de archivos/protocolos (SHCNE_ASSOCCHANGED).</summary>
+    [LibraryImport("shell32.dll")]
+    internal static partial void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
     /// <summary>
     /// Modificadores del teclado. Con el foco dentro de WebView2 el teclado lo procesa otro proceso y
     /// Keyboard.Modifiers (el estado propio de WPF) no ve Ctrl/Shift/Alt. WebView2 sincroniza el estado de

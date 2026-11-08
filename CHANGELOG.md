@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-11-08
+- **Una sola instancia** por carpeta de datos: abrir el navegador otra vez (acceso directo, link de otra app, `.html` desde el Explorador, `--private`) le pasa el pedido a la ventana abierta por un pipe sólo del usuario y termina en ~200 ms, sin ventanas ni log propio. Antes dos procesos escribían la misma sesión y los mismos favoritos.
+- **Navegador predeterminado**: menú ⋮ → "Hacer navegador predeterminado…" registra http/https/.htm/.html en HKCU (sin administrador) y abre Configuración para elegirlo; `--register-default` / `--unregister-default`. Los archivos `.html` pasados por línea de comandos se abren como `file:///`.
+- **Tope de RAM**:
+  - Descarta de una vez las pestañas que hagan falta (estima lo que ocupa cada una con la memoria de los renderers) y espera 15 s a que se libere, salvo que la memoria siga subiendo. Con 9 sitios y tope de 700 MB volvió debajo del tope en un paso (antes: de a una cada 5 s, 8 muestras de 18 sobre el tope; después: 4 de 18 con `BudgetKeepRecentTabs` 0).
+  - No descarta las 2 pestañas de fondo que usaste más recientemente si fue en los últimos 3 min (`BudgetKeepRecentTabs`, `BudgetKeepRecentMinutes`). Alternando entre 2 pestañas con tope de 450 MB: antes 14 descartes y 12 recargas (6,2 s recargando) con la misma memoria promedio (528 MB contra 533 MB); ahora 0 y 0. Es lo que pasaba en el uso real del 8/11 (29 descartes por tope y 26 recargas en una hora). Contra: tras abrir muchas pestañas de golpe puede quedar unos minutos por encima del tope.
+  - No descarta pestañas con un formulario escrito sin enviar (campos distintos de su valor inicial, editor enfocado con texto, aviso de salida): `discard_skipped`, se reintenta a los 10 min. Una pestaña suspendida no contesta scripts, así que se revisa al suspenderla. Probado con `tools/smoke/formulario.txt`: se descartan las otras, la del texto no, y el texto sigue ahí.
+- **CPU en las muestras**: `cpu_pct` y `renderer_cpu_pct` (porcentaje de toda la máquina), y `renderer_private_mb`. Comprobado con `tools/smoke/cpu-suspendida.txt`: una pestaña con un worker en bucle usa 16,5 % (un núcleo de 6) viva o de fondo, 0 % suspendida, y vuelve a 16 % al activarla.
+- Una ventana que se abre sin foco (detrás de otra app, o en las pruebas ocultas) empieza a contar el "foco perdido" desde que carga; antes nunca llegaba el aviso de Windows y sus pestañas sólo se dormían por inactividad.
+- Si la ventana se cierra mientras saca la foto de la pestaña, la foto se descarta (antes se escribía después de guardar la sesión y quedaba huérfana).
+- **Comparación contra Chrome y Edge** (`tools/compare/`): mismas 20 URLs, misma duración, memoria privada de todo el árbol de procesos cada 10 s, con la CPU de la PC al lado para detectar mediciones contaminadas. Chrome for Testing portable en `D:\Tools\chrome-for-testing`. `cuando_libre.py` espera a que la PC esté libre (CPU < 25 %, ≥ 6 GB libres) y corre esta comparación y las pruebas pesadas.
+
 ## 0.3.2 — 2026-11-08
 - El perfil privado se borra al salir de la app: se espera a que termine el proceso de WebView2 (0.24 s medidos) y se borra la carpeta, en vez de depender de que WebView2 llegue a hacerlo (en una corrida quedó).
 - `--automation` también corre arrancando con `--private` (lo ejecuta la primera ventana que carga); nueva orden `toprivate`. Los pasos y resultados de la prueba van siempre al log de la app.

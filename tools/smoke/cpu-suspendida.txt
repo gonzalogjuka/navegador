@@ -1,0 +1,14 @@
+# Prueba de CPU (oculta): una pestaña con un Web Worker en bucle usa un núcleo entero; al suspenderse baja a 0.
+#   Antes de correr, crear <carpeta temporal>\settings.json con: {"SuspendAfterSeconds":15,"FocusLostSeconds":600}
+#   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\cpu-suspendida.txt
+# En las muestras del log: renderer_cpu_pct ≈ 100/núcleos con la pestaña viva (activa o de fondo), ≈ 0 después del
+# suspend_tab, y vuelve a subir después de "tab 0" (resume_tab).
+go https://example.com
+wait 3000
+js window.__w = new Worker(URL.createObjectURL(new Blob(["for(;;){}"]))); 1
+wait 12000
+newtab https://example.org
+wait 45000
+tab 0
+wait 12000
+close
