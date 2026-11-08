@@ -21,7 +21,7 @@ powershell -ExecutionPolicy Bypass -File tools/install-shortcut.ps1   # acceso d
 ```
 Requiere .NET 8 Desktop Runtime y WebView2 Runtime (ambos vienen en Windows 11). Cerrá el navegador antes de publicar.
 
-**Si usás MSI Afterburner / RivaTuner (RTSS):** RTSS se inyecta en WebView2 y lo hace caer de vez en cuando. El navegador se recupera solo y lo avisa en la barra de estado; para que no pase más, corré `tools/rtss-exclude.ps1` en PowerShell **como administrador** y reiniciá Afterburner.
+**Si usás MSI Afterburner / RivaTuner (RTSS):** RTSS intercepta DirectX dentro de WebView2 y lo hace caer de vez en cuando. El navegador se recupera solo y lo avisa en la barra de estado. Para que no pase más: `tools/rtss-exclude.ps1` en PowerShell **como administrador** (crea perfiles con `EnableHooking=0` para `msedgewebview2.exe` y `Navegador.exe`) y después `tools/rtss-restart.ps1` (pide permiso y reinicia Afterburner/RTSS, que lee los perfiles al arrancar). `tools/rtss-check.ps1` abre el navegador 8 veces y cuenta las caídas. `RTSSHooks64.dll` sigue apareciendo cargada en todo programa con ventana (hook global); eso es normal.
 
 ## Datos y métricas
 Todo en `%LOCALAPPDATA%\Navegador`: `settings.json` (botón ⚙; se aplica al reiniciar), `session.json`, `WebView2\` (perfil) y `logs\session-*.jsonl`.
