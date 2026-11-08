@@ -40,7 +40,7 @@ No uses `metrics record --app msedgewebview2` para medir el navegador: ese nombr
 
 Opciones: `Navegador.exe [--data-dir <carpeta>] [--private] [--automation <pasos.txt>] [url]`.
 - `--data-dir`: otra carpeta de datos (pruebas, sin tocar tu perfil).
-- `--automation`: prueba de humo **sin teclas simuladas**; el navegador ejecuta los pasos internamente y guarda capturas en `<datos>\shots\` aunque la ventana esté tapada. Órdenes: `wait MS`, `go TEXTO`, `newtab [TEXTO]`, `tab N`, `sleep N`, `bookmark`, `find TEXTO`, `findclose`, `zoom +|-|0`, `history`, `menu`, `tabmenu N`, `closemenus`, `private`, `main`, `js CÓDIGO`, `cleardata`, `shot NOMBRE`, `close`. No usar SendKeys sobre el escritorio real: las teclas pueden ir a otra ventana.
+- `--automation`: prueba de humo **oculta**: las ventanas se abren fuera de la pantalla, sin barra de tareas y sin tomar el foco; los menús no se abren (se dibujan en la captura); la app se cierra sola al terminar, aunque falle. El navegador ejecuta los pasos internamente y guarda capturas en `<datos>\shots\`. Pasos listos en `tools/smoke/` (`controles.txt`, `privacidad.txt`). Órdenes: `wait MS`, `go TEXTO`, `newtab [TEXTO]`, `tab N`, `sleep N`, `bookmark`, `find TEXTO`, `findclose`, `zoom +|-|0`, `history`, `menu`, `tabmenu N`, `closemenus`, `private`, `main`, `js CÓDIGO`, `cleardata`, `shot NOMBRE`, `close`. Nunca usar teclas o clics simulados sobre el escritorio real.
 
 ## Estructura
 | Carpeta | Qué |

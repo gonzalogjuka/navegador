@@ -26,6 +26,16 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
     public MainWindow OpenWindow(string? startUrl, bool isPrivate)
     {
         var w = new MainWindow(this, startUrl, isPrivate);
+        if (AutomationScript is not null)
+        {
+            // Prueba automática: la ventana existe y dibuja, pero fuera de la pantalla, sin barra de tareas
+            // y sin tomar el foco, para no tapar ni interrumpir lo que esté haciendo el usuario.
+            w.ShowActivated = false;
+            w.ShowInTaskbar = false;
+            w.WindowStartupLocation = System.Windows.WindowStartupLocation.Manual;
+            w.Left = -32000;
+            w.Top = -32000;
+        }
         w.Show();
         return w;
     }

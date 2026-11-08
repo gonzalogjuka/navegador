@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-11-07
+- Las pruebas automáticas (`--automation`) ya no molestan: ventanas fuera de pantalla, sin barra de tareas ni foco, menús dibujados sin abrirse (antes Windows los traía al borde visible). Verificado: 163 muestras, 0 veces con el foco, 0 ventanas visibles.
+- `--automation` cierra la app siempre al terminar (archivo inexistente, error o sin `close`), para que nunca quede un navegador invisible abierto.
+- `tools/rtss-check.ps1` corre oculto. Pasos de prueba guardados en `tools/smoke/`.
+
 ## 0.2.0 — 2026-11-07
 Controles, seguridad y privacidad.
 - Menú ⋮, estrella de favoritos (Ctrl+D), página de nueva pestaña (buscador, favoritos, recientes), historial (`about:history`, Ctrl+H), buscar en la página con barra propia (Ctrl+F), zoom con indicador (Ctrl +/−/0), imprimir (Ctrl+P), descargas (Ctrl+J), menú de pestaña (recargar, duplicar, dormir ahora, cerrar las demás), ventana privada (Ctrl+Shift+N, perfil InPrivate).

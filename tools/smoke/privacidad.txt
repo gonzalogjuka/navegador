@@ -1,0 +1,16 @@
+# Prueba de humo de privacidad (oculta): notificaciones rechazadas y borrar datos.
+#   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\privacidad.txt
+# En el log: permission_denied, automation_js "denied", cookie "prueba=1" antes y "" después de cleardata.
+go https://example.com
+wait 4000
+js Notification.requestPermission()
+wait 2000
+js Notification.permission
+js document.cookie = "prueba=1; max-age=3600"; document.cookie
+wait 500
+cleardata
+wait 2000
+go https://example.com
+wait 3000
+js document.cookie
+close

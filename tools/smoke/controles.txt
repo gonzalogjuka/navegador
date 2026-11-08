@@ -1,0 +1,46 @@
+# Prueba de humo de controles. Corre oculta (fuera de pantalla, sin foco):
+#   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\controles.txt
+# Capturas en <carpeta temporal>\shots\.
+wait 1500
+shot c1-newtab
+# HTTPS primero: sitio sin HTTPS (vuelve a http) y sitio con HTTPS (queda en https)
+go http://neverssl.com
+wait 7000
+shot c2-neverssl
+newtab http://example.com
+wait 5000
+bookmark
+find domain
+wait 1500
+zoom +
+zoom +
+wait 800
+shot c3-find-zoom-star
+findclose
+zoom 0
+newtab es.wikipedia.org/wiki/Navegador_web
+wait 5000
+newtab
+wait 1500
+shot c4-newtab-with-data
+history
+wait 1500
+shot c5-history
+menu
+wait 800
+shot c6-menu
+closemenus
+tabmenu 1
+wait 800
+shot c7-tabmenu
+closemenus
+sleep 1
+wait 500
+private
+go es.wikipedia.org/wiki/Privacidad
+wait 5000
+shot c8-private
+close
+main
+wait 500
+close

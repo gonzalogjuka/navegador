@@ -18,28 +18,42 @@ namespace Navegador;
 public partial class MainWindow
 {
     private ContextMenu? _openMenu;
+    /// <summary>Elemento debajo del cual se dibuja el menú en la captura (botón ⋮ o pestaña).</summary>
+    private FrameworkElement? _menuAnchor;
 
+    /// <summary>
+    /// Ejecuta los pasos y al final cierra la app siempre (aunque falte el archivo, falle un paso o no haya "close"):
+    /// en modo prueba las ventanas están fuera de pantalla y una que quedara abierta sería invisible.
+    /// </summary>
     private async Task RunAutomationAsync(string path)
     {
         var target = this;
-        foreach (var raw in await File.ReadAllLinesAsync(path))
+        try
         {
-            var line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#')) continue;
-            var sp = line.IndexOf(' ');
-            var cmd = sp < 0 ? line : line[..sp];
-            var arg = sp < 0 ? "" : line[(sp + 1)..].Trim();
-            _log.Event("automation_step", ("cmd", cmd), ("arg", arg), ("private", target._isPrivate));
-            try
+            foreach (var raw in await File.ReadAllLinesAsync(path))
             {
-                await target.RunStepAsync(cmd, arg, w => target = w);
-            }
-            catch (Exception ex)
-            {
-                _log.Event("automation_error", ("cmd", cmd), ("message", ex.Message));
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith('#')) continue;
+                var sp = line.IndexOf(' ');
+                var cmd = sp < 0 ? line : line[..sp];
+                var arg = sp < 0 ? "" : line[(sp + 1)..].Trim();
+                _log.Event("automation_step", ("cmd", cmd), ("arg", arg), ("private", target._isPrivate));
+                try
+                {
+                    await target.RunStepAsync(cmd, arg, w => target = w);
+                }
+                catch (Exception ex)
+                {
+                    _log.Event("automation_error", ("cmd", cmd), ("message", ex.Message));
+                }
             }
         }
+        catch (IOException ex)
+        {
+            _log.Event("automation_error", ("cmd", "(archivo)"), ("message", ex.Message));
+        }
         _log.Event("automation_done");
+        Application.Current.Shutdown();
     }
 
     private async Task RunStepAsync(string cmd, string arg, Action<MainWindow> switchTo)
@@ -74,14 +88,15 @@ public partial class MainWindow
                     && VisualTreeHelper.GetChildrenCount(c) > 0 && VisualTreeHelper.GetChild(c, 0) is FrameworkElement fe
                     && fe.ContextMenu is { } cm)
                 {
-                    cm.PlacementTarget = fe;
-                    cm.IsOpen = true;
+                    // No se abre (un menú no puede quedar fuera de la pantalla): se dibuja en la próxima captura.
+                    cm.DataContext = fe.DataContext;
                     _openMenu = cm;
+                    _menuAnchor = fe;
                 }
                 break;
             case "closemenus":
-                if (_openMenu is not null) _openMenu.IsOpen = false;
                 _openMenu = null;
+                _menuAnchor = null;
                 break;
             case "private":
                 var w = _app.OpenWindow(null, isPrivate: true);
@@ -137,15 +152,21 @@ public partial class MainWindow
                 var at = Host.TranslatePoint(new Point(0, 0), root);
                 dc.DrawImage(page, new System.Windows.Rect(at.X, at.Y, Host.ActualWidth, Host.ActualHeight));
             }
-            if (_openMenu is { IsOpen: true } menu && menu.ActualWidth > 0)
+            if (_openMenu is { } menu && _menuAnchor is { } anchor)
             {
-                var menuShot = new RenderTargetBitmap(W(menu.ActualWidth), H(menu.ActualHeight), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+                // El menú nunca se abrió: se le aplican los estilos de la ventana, se mide y se dibuja a mano.
+                if (!menu.Resources.MergedDictionaries.Contains(Resources)) menu.Resources.MergedDictionaries.Add(Resources);
+                menu.ApplyTemplate();
+                menu.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                menu.Arrange(new System.Windows.Rect(menu.DesiredSize));
+                menu.UpdateLayout();
+                var size = menu.DesiredSize;
+                var menuShot = new RenderTargetBitmap(W(size.Width), H(size.Height), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
                 menuShot.Render(menu);
-                var screenMenu = menu.PointToScreen(new Point(0, 0));
-                var screenRoot = root.PointToScreen(new Point(0, 0));
-                var x = Math.Min((screenMenu.X - screenRoot.X) / dpi.DpiScaleX, root.ActualWidth - menu.ActualWidth);
-                var y = (screenMenu.Y - screenRoot.Y) / dpi.DpiScaleY;
-                dc.DrawImage(menuShot, new System.Windows.Rect(x, y, menu.ActualWidth, menu.ActualHeight));
+                var at = anchor.TranslatePoint(new Point(0, anchor.ActualHeight), root);
+                var x = anchor == MenuButton ? at.X + anchor.ActualWidth - size.Width : at.X;
+                x = Math.Clamp(x, 0, Math.Max(0, root.ActualWidth - size.Width));
+                dc.DrawImage(menuShot, new System.Windows.Rect(x, at.Y, size.Width, size.Height));
             }
         }
         var final = new RenderTargetBitmap(W(root.ActualWidth), H(root.ActualHeight), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);

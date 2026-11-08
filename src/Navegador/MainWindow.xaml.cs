@@ -1103,7 +1103,13 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Ajustes (se aplican al reiniciar)", null, OpenSettings));
         menu.Items.Add(Item("Abrir carpeta de datos y registros", null,
             () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_app.Paths.Root}\"") { UseShellExecute = false })));
+        if (_app.AutomationScript is not null)
+        {
+            // Prueba automática: el menú no se abre (Windows lo traería al borde de la pantalla); se dibuja en la captura.
+            _openMenu = menu;
+            _menuAnchor = MenuButton;
+            return;
+        }
         menu.IsOpen = true;
-        _openMenu = menu;
     }
 }
