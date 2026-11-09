@@ -40,6 +40,9 @@ public partial class MainWindow : Window
     private long _blockedTotal;
     private double? _lastPrivateMb;
     private MemoryReading? _lastMemory;
+    /// <summary>La última muestra tal como se midió (_lastMemory se corrige con estimaciones entre muestras).</summary>
+    private MemoryReading? _lastSample;
+    private readonly PageCosts _pageCosts = new();
     private BudgetDiscard? _lastBudgetDiscard;
     private Dictionary<int, TimeSpan> _lastCpu = [];
     private DateTime? _lastCpuAtUtc;
@@ -360,7 +363,10 @@ public partial class MainWindow : Window
         }
         tab.CurrentNavigationId = e.NavigationId;
         if (tab.RestoreSpan is null) tab.LastScroll = null; // página nueva: el scroll anterior ya no corresponde
-        tab.TopHost = BrowserTab.HostOf(uri);
+        var newHost = BrowserTab.HostOf(uri);
+        // Otro sitio (o una pestaña que despierta: al descartarla se olvida el host): hacer lugar antes de que cargue.
+        if (tab.InternalPage is null && newHost is not null && newHost != tab.TopHost) _ = MakeRoomAsync(tab, newHost);
+        tab.TopHost = newHost;
         tab.BlockedOnPage = 0;
         tab.IsLoading = true;
         if (tab == _active) RefreshChrome();
@@ -665,7 +671,7 @@ public partial class MainWindow : Window
             case HibernateAction.Discard:
             {
                 if (tab.IsActive) return;
-                if (d.Reason is "idle" or "budget"
+                if (d.Reason is "idle" or "budget" or "room"
                     && (tab.State == TabState.Suspended ? tab.UnsavedInputWhenSuspended : await HasUnsavedInputAsync(core)))
                 {
                     // Descartar borraría lo escrito. Se reintenta en 10 min; mientras, la política elige otra.
@@ -676,16 +682,45 @@ public partial class MainWindow : Window
                 var span = _log.StartSpan("discard_tab", ("tab_id", tab.Id), ("reason", d.Reason));
                 DisposeWebView(tab);
                 tab.State = TabState.Discarded;
+                tab.TopHost = null; // al despertar carga de cero: cuenta como sitio nuevo para hacer lugar
                 span.End();
-                if (d.Reason == "budget")
+                if (d.Reason is "budget" or "room")
                 {
                     _lastBudgetDiscard = new BudgetDiscard(DateTime.UtcNow, _lastMemory?.TotalMb ?? 0);
                     _log.Event("budget_discard", ("tab_id", tab.Id), ("private_mb", _lastMemory?.TotalMb),
-                        ("renderer_mb", _lastMemory?.RendererMb), ("budget_mb", _settings.RamBudgetMb));
+                        ("pages_mb", _lastMemory?.PagesMb), ("budget_mb", _settings.RamBudgetMb), ("reason", d.Reason));
                 }
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Hace lugar antes de cargar una página (abrir o despertar una pestaña, o ir a otro sitio): descarta lo que haga
+    /// falta para que la página entre sin pasar el tope, en vez de pasarlo y descartar después (la GPU tarda ~15 s en
+    /// devolver memoria). Lo que va a ocupar: lo que sumó la última carga de ese sitio (PageCosts) o el promedio de las
+    /// páginas vivas, lo que sea más. La última medición se corrige con lo liberado y lo que va a cargar, para que
+    /// varias pestañas despertadas antes de la próxima muestra no descarten de más.
+    /// </summary>
+    private async Task MakeRoomAsync(BrowserTab loading, string host)
+    {
+        if (_isPrivate || _lastMemory is not { } memory) return; // la privada comparte procesos y medición con la normal
+        if (_lastSample is { } sample) _pageCosts.Start(host, sample.PagesMb, DateTime.UtcNow);
+        var tabs = _tabs.Select(t => t.Snapshot()).ToList();
+        var perPage = HibernationPolicy.EstimatePageMb(tabs, memory);
+        var incoming = Math.Max(perPage, _pageCosts.CostOf(host) ?? 0);
+        var victims = HibernationPolicy.BudgetVictims(tabs, DateTime.UtcNow, _settings, memory, incoming,
+            new HashSet<int> { loading.Id });
+        var freed = 0.0;
+        foreach (var id in victims)
+        {
+            var tab = _tabs.FirstOrDefault(t => t.Id == id);
+            await ApplyAsync(new PolicyDecision(id, HibernateAction.Discard, "room"));
+            if (tab?.State == TabState.Discarded) freed += perPage;
+        }
+        _lastMemory = new MemoryReading(memory.TotalMb - freed + incoming, memory.PagesMb - freed + incoming);
+        _log.Event("make_room", ("tab_id", loading.Id), ("incoming_mb", Math.Round(incoming)), ("learned", _pageCosts.CostOf(host) is not null),
+            ("discarded", victims.Count));
     }
 
     /// <summary>
@@ -779,17 +814,19 @@ public partial class MainWindow : Window
         if (_env is null) return;
         var pids = new HashSet<int> { Environment.ProcessId };
         var renderers = new HashSet<int>();
+        var gpu = new HashSet<int>();
         try
         {
             foreach (var info in _env.GetProcessInfos())
             {
                 pids.Add(info.ProcessId);
                 if (info.Kind == CoreWebView2ProcessKind.Renderer) renderers.Add(info.ProcessId);
+                else if (info.Kind == CoreWebView2ProcessKind.Gpu) gpu.Add(info.ProcessId);
             }
         }
         catch (System.Runtime.InteropServices.COMException) { }
 
-        long priv = 0, rss = 0, rendererPriv = 0;
+        long priv = 0, rss = 0, rendererPriv = 0, gpuPriv = 0;
         var alive = 0;
         var cpu = new Dictionary<int, TimeSpan>();
         TimeSpan cpuDelta = TimeSpan.Zero, rendererCpuDelta = TimeSpan.Zero;
@@ -801,6 +838,7 @@ public partial class MainWindow : Window
                 priv += p.PrivateMemorySize64;
                 rss += p.WorkingSet64;
                 if (renderers.Contains(pid)) rendererPriv += p.PrivateMemorySize64;
+                if (gpu.Contains(pid)) gpuPriv += p.PrivateMemorySize64;
                 cpu[pid] = p.TotalProcessorTime;
                 if (_lastCpu.TryGetValue(pid, out var before))
                 {
@@ -827,16 +865,18 @@ public partial class MainWindow : Window
 
         const double mb = 1024 * 1024;
         _lastPrivateMb = Math.Round(priv / mb, 1);
-        _lastMemory = new MemoryReading(_lastPrivateMb.Value, Math.Round(rendererPriv / mb, 1));
+        _lastMemory = _lastSample = new MemoryReading(_lastPrivateMb.Value, Math.Round((rendererPriv + gpuPriv) / mb, 1));
         RefreshStatus();
         if (_isPrivate) return; // los procesos son los mismos que los de la ventana normal: no duplicar muestras
+        _pageCosts.Observe(_lastSample.Value.PagesMb, now);
         _log.Write(new Dictionary<string, object?>
         {
             ["type"] = "sample",
             ["app_procs"] = alive,
             ["app_rss_mb"] = Math.Round(rss / mb, 1),
             ["app_private_mb"] = _lastPrivateMb,
-            ["renderer_private_mb"] = _lastMemory.Value.RendererMb,
+            ["renderer_private_mb"] = Math.Round(rendererPriv / mb, 1),
+            ["gpu_private_mb"] = Math.Round(gpuPriv / mb, 1),
             ["cpu_pct"] = cpuPct,
             ["renderer_cpu_pct"] = rendererCpuPct,
             ["tabs"] = _tabs.Count,

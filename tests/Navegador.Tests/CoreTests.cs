@@ -58,8 +58,8 @@ public class HibernationPolicyTests
         new(id, active, state, Now.AddSeconds(-idleSeconds), audio, keep);
 
     private static List<PolicyDecision> Decide(TabSnapshot[] tabs, DateTime? focusLost = null, double? mem = null, bool lowered = false,
-        double renderer = 0, BudgetDiscard? lastBudget = null) =>
-        HibernationPolicy.Decide(tabs, Now, S, focusLost, mem is { } m ? new MemoryReading(m, renderer) : null, lowered, lastBudget);
+        double pages = 0, BudgetDiscard? lastBudget = null) =>
+        HibernationPolicy.Decide(tabs, Now, S, focusLost, mem is { } m ? new MemoryReading(m, pages) : null, lowered, lastBudget);
 
     [Fact]
     public void Background_tab_sleeps_after_idle_threshold_not_before()
@@ -105,27 +105,52 @@ public class HibernationPolicyTests
     [Fact]
     public void Far_over_budget_discards_enough_tabs_at_once()
     {
-        // 5 pestañas vivas con 1000 MB de renderers = 200 MB cada una; 450 MB de más → hacen falta 3.
+        // 5 pestañas vivas con 1000 MB de páginas = 200 MB cada una; 600 MB sobre la meta (85 % de 1000) → hacen falta 3.
         TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 840), Tab(3, 780), Tab(4, 720), Tab(5, 660)];
-        var d = Decide(tabs, mem: 1450, renderer: 1000);
+        var d = Decide(tabs, mem: 1450, pages: 1000);
         Assert.Equal([2, 3, 4], d.Where(x => x.Reason == "budget").Select(x => x.TabId).Order());
     }
 
     [Fact]
-    public void Budget_never_discards_recently_used_or_keep_alive_tabs()
+    public void Budget_never_discards_keep_alive_tabs()
     {
-        // La pestaña de la que recién saliste (hace 1 min) y la que tiene un formulario escrito se quedan, aunque sobre memoria.
-        var d = Decide([Tab(1, 0, active: true), Tab(2, 60), Tab(3, 600, keep: true)], mem: 5000, renderer: 3000);
-        Assert.Empty(d.Where(x => x.Action == HibernateAction.Discard));
+        // Formulario escrito: no se descarta aunque sobre memoria y sea la más vieja; la reciente sí, porque no queda otra.
+        var d = Decide([Tab(1, 0, active: true), Tab(2, 60), Tab(3, 600, keep: true)], mem: 5000, pages: 3000);
+        Assert.Equal([new PolicyDecision(2, HibernateAction.Discard, "budget")], d.Where(x => x.Action == HibernateAction.Discard));
     }
 
     [Fact]
-    public void Burst_of_recent_tabs_only_protects_the_two_most_recent()
+    public void Recent_tabs_are_discarded_last()
     {
-        // Abriste 5 pestañas en el último minuto: se salvan las 2 últimas que miraste, las otras 3 se pueden descartar.
+        // 4 vivas con 1200 MB de páginas = 300 MB cada una. La vieja (10 min) va primero; si hace falta más, las
+        // recientes, empezando por la más vieja de ellas.
+        TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 30, TabState.Suspended), Tab(3, 90, TabState.Suspended), Tab(4, 600)];
+        Assert.Equal([4], Decide(tabs, mem: 1100, pages: 1200).Where(x => x.Reason == "budget").Select(x => x.TabId));
+        Assert.Equal([3, 4], Decide(tabs, mem: 1400, pages: 1200).Where(x => x.Reason == "budget").Select(x => x.TabId).Order());
+    }
+
+    [Fact]
+    public void Burst_of_recent_tabs_discards_the_two_most_recent_last()
+    {
+        // Abriste 5 pestañas en el último minuto (500 MB cada una, 1450 MB sobre la meta): van las 3 primeras; las 2
+        // últimas que miraste se quedan porque no hace falta más.
         TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 50), Tab(3, 40), Tab(4, 30), Tab(5, 20), Tab(6, 10)];
-        var d = Decide(tabs, mem: 5000, renderer: 3000);
+        var d = Decide(tabs, mem: 2300, pages: 3000);
         Assert.Equal([2, 3, 4], d.Where(x => x.Reason == "budget").Select(x => x.TabId).Order());
+    }
+
+    [Fact]
+    public void Room_is_made_before_loading_a_page_that_would_pass_the_budget()
+    {
+        // 800 MB con 3 vivas de 200 MB: una página más (200) pasaría la meta de 850 → se descarta la de fondo más vieja
+        // y nunca la que va a cargar (skip), aunque sea la más vieja.
+        TabSnapshot[] tabs = [Tab(1, 0, active: true), Tab(2, 600), Tab(3, 300), Tab(4, 900)];
+        var mem = new MemoryReading(800, 600);
+        var page = HibernationPolicy.EstimatePageMb(tabs, mem);
+        Assert.Equal(150, page); // 600 MB ÷ 4 vivas
+        Assert.Equal([2], HibernationPolicy.BudgetVictims(tabs, Now, S, mem, page, new HashSet<int> { 4 }));
+        // Con lugar de sobra no se toca nada.
+        Assert.Empty(HibernationPolicy.BudgetVictims(tabs, Now, S, new MemoryReading(500, 300), page, new HashSet<int> { 4 }));
     }
 
     [Fact]
@@ -155,6 +180,35 @@ public class HibernationPolicyTests
     [Fact]
     public void Under_budget_does_nothing_extra() =>
         Assert.Empty(Decide([Tab(1, 0, active: true), Tab(2, 30)], mem: 1000));
+}
+
+public class PageCostsTests
+{
+    private static readonly DateTime T0 = new(2026, 11, 8, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void Cost_is_the_peak_rise_within_the_window_and_only_known_after_it()
+    {
+        var c = new PageCosts();
+        c.Start("www.google.com", 300, T0);
+        c.Observe(850, T0.AddSeconds(5));
+        c.Observe(700, T0.AddSeconds(10));
+        Assert.Null(c.CostOf("www.google.com")); // todavía cargando
+        c.Observe(1200, T0.AddSeconds(16)); // ya fuera de la ventana: cuenta igual como pico de la carga
+        Assert.Equal(900, c.CostOf("WWW.GOOGLE.COM"));
+        Assert.Null(c.CostOf("example.com"));
+    }
+
+    [Fact]
+    public void A_lighter_reload_halves_a_heavy_cost_at_most()
+    {
+        var c = new PageCosts();
+        c.Start("maps", 200, T0);
+        c.Observe(800, T0.AddSeconds(15));
+        c.Start("maps", 500, T0.AddSeconds(60));
+        c.Observe(550, T0.AddSeconds(75));
+        Assert.Equal(300, c.CostOf("maps"));
+    }
 }
 
 public class PersistenceTests : IDisposable

@@ -1,0 +1,29 @@
+# Tope de RAM con páginas pesadas (oculta, ~2,5 min): Google Maps, YouTube y La Nación, alternando cada 10 s.
+#   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\alternar-pesadas.txt
+# Mide el límite del tope: cada una sola lleva el total a ~1 GB, así que con el tope por defecto queda una viva y
+# cada cambio recarga (restore_tab). Ver docs/PLAN.md, "Límite del tope".
+go https://www.google.com/maps/place/Buenos+Aires
+wait 12000
+newtab https://www.youtube.com/
+wait 10000
+newtab https://www.lanacion.com.ar/
+wait 10000
+tab 0
+wait 10000
+tab 1
+wait 10000
+tab 2
+wait 10000
+tab 0
+wait 10000
+tab 1
+wait 10000
+tab 2
+wait 10000
+tab 0
+wait 10000
+tab 1
+wait 10000
+tab 2
+wait 30000
+close

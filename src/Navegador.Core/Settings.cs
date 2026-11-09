@@ -10,8 +10,9 @@ public sealed class Settings
     public int DiscardAfterMinutes { get; set; } = 15;
     public int FocusLostSeconds { get; set; } = 10;
     /// <summary>
-    /// El tope de RAM no descarta las BudgetKeepRecentTabs pestañas de fondo usadas más recientemente si las usaste en
-    /// los últimos BudgetKeepRecentMinutes: evita descartar y recargar en bucle la pestaña a la que volvés.
+    /// El tope de RAM descarta al final (sólo si no queda otra, de a una) las BudgetKeepRecentTabs pestañas de fondo
+    /// usadas más recientemente si las usaste en los últimos BudgetKeepRecentMinutes: la pestaña a la que volvés es la
+    /// que más cuesta recargar.
     /// </summary>
     public int BudgetKeepRecentTabs { get; set; } = 2;
     public int BudgetKeepRecentMinutes { get; set; } = 3;

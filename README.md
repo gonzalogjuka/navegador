@@ -5,7 +5,7 @@ Plan, fases y criterios: [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Qué tiene
 - **Pestañas que se duermen**: una pestaña de fondo pasa a memoria baja y se suspende al minuto; a los 15 min se descarta (queda URL, título, scroll y un **snapshot**: al volver ves la foto al instante mientras la página real carga). Al perder el foco (juego, otra app) se duermen todas las de fondo a los 10 s. Nunca se toca la activa ni la que suena.
-- **Presupuesto de RAM** (1 GB por defecto): si el navegador entero lo pasa, descarta de una vez las pestañas de fondo usadas hace más tiempo que hagan falta para volver al tope (estimando lo que ocupa cada una) y espera 15 s a que se libere la memoria. No descarta las que usaste en los últimos 3 min (`BudgetKeepRecentMinutes`), para no descartar y recargar en bucle, ni las que tienen un formulario que escribiste y no enviaste (lo que completa el sitio, como un buscador, no cuenta).
+- **Presupuesto de RAM** (1 GB por defecto): antes de cargar una página (pestaña nueva, despertar una dormida, ir a otro sitio) hace lugar para lo que va a ocupar, recordando cuánto sumó la última vez ese sitio; si igual se pasa, descarta de una vez las pestañas de fondo usadas hace más tiempo hasta quedar en el 85 % del tope y espera 15 s a que se libere la memoria. Las que usaste en los últimos 3 min (`BudgetKeepRecentMinutes`) van al final. Nunca descarta la activa, la que suena ni las que tienen un formulario que escribiste y no enviaste (lo que completa el sitio, como un buscador, no cuenta).
 - **Un proceso por sitio** (`--process-per-site`): pestañas del mismo sitio comparten renderer.
 - **Bloqueo de rastreo y publicidad** incluido: prevención de rastreo de Chromium en *Strict* + `blocklist.txt`. Las peticiones normales no pasan por código propio. El escudo de la barra de estado permite un sitio con un clic.
 - **Arranque liviano**: la sesión se restaura con todas las pestañas dormidas salvo la activa.
@@ -36,7 +36,7 @@ A mano:
 ```
 cd tools/metrics && .venv\Scripts\python -m metrics report %LOCALAPPDATA%\Navegador\logs\session-AAAAMMDD-HHMMSS.jsonl
 ```
-Muestras cada 5 s (`app_private_mb`, `renderer_private_mb`, `cpu_pct` y `renderer_cpu_pct` —porcentaje de toda la máquina—, `app_procs`, pestañas por estado, bloqueados), spans (`startup`, `suspend_tab`, `discard_tab`, `restore_tab`), eventos `budget_discard`, `discard_skipped` (formulario sin enviar), `instance_request`, e intervalos `focus_lost→hibernate_done` y `focus_gained→tab_active_ready`.
+Muestras cada 5 s (`app_private_mb`, `renderer_private_mb`, `gpu_private_mb`, `cpu_pct` y `renderer_cpu_pct` —porcentaje de toda la máquina—, `app_procs`, pestañas por estado, bloqueados), spans (`startup`, `suspend_tab`, `discard_tab`, `restore_tab`), eventos `make_room` (lugar hecho antes de cargar), `budget_discard` (`reason` budget o room), `discard_skipped` (formulario sin enviar), `instance_request`, e intervalos `focus_lost→hibernate_done` y `focus_gained→tab_active_ready`.
 No uses `metrics record --app msedgewebview2` para medir el navegador: ese nombre lo comparten otras apps.
 
 Opciones: `Navegador.exe [--data-dir <carpeta>] [--private] [--automation <pasos.txt>] [url | archivo.html]` y `--register-default` / `--unregister-default`.
