@@ -279,6 +279,7 @@ public partial class MainWindow : Window
         var core = wv.CoreWebView2;
         _app.BrowserProcessId = (int)core.BrowserProcessId;
         Harden(core);
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(EditTrackerScript);
 
         core.SourceChanged += (_, _) =>
         {
@@ -688,21 +689,43 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// ¿La página tiene algo escrito sin enviar? Campos de texto distintos de su valor inicial, el editor enfocado con
-    /// texto, o un aviso de "salir de la página" por propiedad. Sólo el documento principal (los iframes de otro origen
-    /// no se pueden leer). Si la página no contesta en 1,5 s se la trata como que sí: no se pierde nada por esperar.
+    /// Marca los campos que la persona editó (eventos de entrada con isTrusted; lo que completa el sitio, como la
+    /// búsqueda en el cuadro de Google o de Mercado Libre, no cuenta) y los olvida al enviar el formulario.
+    /// </summary>
+    private const string EditTrackerScript = """
+        (() => {
+          const key = Symbol.for('navegador.edited');
+          if (window[key]) return;
+          const edited = new Set();
+          Object.defineProperty(window, key, { value: edited });
+          document.addEventListener('input', e => {
+            if (!e.isTrusted) return;
+            const t = e.composedPath()[0];
+            if (!(t instanceof Element)) return;
+            const root = t.isContentEditable ? (t.closest('[contenteditable]:not([contenteditable=false])') || t) : t;
+            edited.add(root);
+          }, true);
+          document.addEventListener('submit', e => {
+            for (const el of e.target.elements || []) edited.delete(el);
+          }, true);
+        })();
+        """;
+
+    /// <summary>
+    /// ¿La persona dejó algo escrito sin enviar? Campos que editó (ver EditTrackerScript) con texto distinto de su
+    /// valor inicial, o un aviso de "salir de la página" por propiedad. Sólo el documento principal (los iframes de
+    /// otro origen no se pueden leer). Si la página no contesta en 1,5 s se la trata como que sí: no se pierde nada por
+    /// esperar.
     /// </summary>
     private static async Task<bool> HasUnsavedInputAsync(CoreWebView2 core)
     {
         const string script = """
             (() => {
-              const skip = ['hidden','submit','button','reset','image','file','password','checkbox','radio','range','color'];
-              for (const e of document.querySelectorAll('input,textarea')) {
-                if (e.disabled || e.readOnly || skip.includes(e.type)) continue;
-                if (e.value.trim() && e.value !== e.defaultValue) return true;
+              const edited = window[Symbol.for('navegador.edited')];
+              for (const e of edited || []) {
+                if (!e.isConnected || e.disabled || e.readOnly) { edited.delete(e); continue; }
+                if (e.isContentEditable ? e.textContent.trim() : (e.value || '').trim() && e.value !== e.defaultValue) return true;
               }
-              const a = document.activeElement;
-              if (a && a.isContentEditable && a.textContent.trim()) return true;
               return typeof window.onbeforeunload === 'function';
             })()
             """;

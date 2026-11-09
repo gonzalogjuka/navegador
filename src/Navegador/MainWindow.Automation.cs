@@ -13,6 +13,7 @@ namespace Navegador;
 ///   wait MS · go TEXTO · newtab [TEXTO] · tab N · sleep N · bookmark · find TEXTO · findclose · zoom +|-|0
 ///   history · menu · tabmenu N · closemenus · private · main · toprivate (ir a la ventana privada abierta) · shot NOMBRE · close
 ///   js CÓDIGO (resultado al log) · cleardata (borra datos sin preguntar)
+///   type TEXTO (escribe en el campo enfocado como una persona: eventos de entrada reales, vía CDP Input.insertText)
 /// Las capturas (interfaz + página + menú abierto, aunque la ventana esté tapada) van a &lt;datos&gt;\shots\NOMBRE.png.
 /// </summary>
 public partial class MainWindow
@@ -73,6 +74,10 @@ public partial class MainWindow
                 _app.Log.Event("automation_js", ("result", result)); // el log de la ventana privada no escribe
                 break;
             case "cleardata": await ClearBrowsingDataAsync(confirm: false); break;
+            case "type":
+                await _active!.Core!.CallDevToolsProtocolMethodAsync("Input.insertText",
+                    System.Text.Json.JsonSerializer.Serialize(new { text = arg }));
+                break;
             case "sleep":
                 var t = _tabs[int.Parse(arg)];
                 if (t.CanSleep) await ApplyAsync(new PolicyDecision(t.Id, HibernateAction.Discard, "manual"));

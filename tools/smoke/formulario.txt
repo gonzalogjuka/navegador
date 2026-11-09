@@ -1,13 +1,16 @@
-# Prueba del tope de RAM con un formulario escrito (oculta): la pestaña con texto sin enviar no se descarta.
+# Prueba del tope de RAM con un formulario escrito (oculta): la pestaña con texto que escribió la persona no se
+# descarta; la que tiene un campo completado por el sitio (como el cuadro de búsqueda de Google) sí.
 #   Antes de correr, crear <carpeta temporal>\settings.json con: {"RamBudgetMb":128,"BudgetKeepRecentMinutes":0}
 #   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\formulario.txt
-# En el log: discard_skipped (why=unsaved_input) para la pestaña 1, budget_discard para las otras de fondo, y el
-# último automation_js devuelve "borrador importante" (si se hubiera descartado diría "SE PERDIO").
+# En el log: discard_skipped (why=unsaved_input) sólo para la pestaña 1, budget_discard para las otras de fondo
+# (también la 2), y el último automation_js devuelve "borrador importante" (si se hubiera descartado diría "SE PERDIO").
 go https://example.com
 wait 3000
-js document.body.insertAdjacentHTML("beforeend", "<textarea id=t></textarea>"); document.getElementById("t").value = "borrador importante"; 1
+js document.body.insertAdjacentHTML("beforeend", "<textarea id=t></textarea>"); document.getElementById("t").focus(); 1
+type borrador importante
 newtab https://example.org
 wait 3000
+js document.body.insertAdjacentHTML("beforeend", "<input id=q>"); document.getElementById("q").value = "puesto por el sitio"; 1
 newtab https://example.net
 wait 3000
 newtab https://www.iana.org/help/example-domains

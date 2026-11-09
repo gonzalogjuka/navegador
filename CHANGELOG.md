@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-11-08
+- **"Formulario sin enviar" sólo cuenta lo que escribiste vos.** Antes cualquier campo con texto distinto de su valor inicial frenaba el descarte, y eso incluía los cuadros de búsqueda que completa el sitio (Google, Mercado Libre, Maps): en un uso simulado de 11 pestañas, 3 páginas con buscador quedaron protegidas 10 min cada una sin que nadie hubiera escrito nada. Ahora un script en cada página marca los campos que reciben entrada real (`isTrusted`) y los olvida al enviar el formulario; con el mismo uso: 0 `discard_skipped`.
+- `--automation`: orden `type TEXTO`, que escribe en el campo enfocado como una persona (CDP `Input.insertText`, eventos de entrada reales). `tools/smoke/formulario.txt` la usa y suma un control: un campo completado por la página se descarta igual. Resultado: la pestaña con texto escrito se salva y el texto sigue ("borrador importante"); la del campo del sitio se descarta.
+- `tools/smoke/uso-real.txt`: ~7 min de uso simulado (búsqueda, YouTube, GitHub, diarios, Mercado Libre, Wikipedia, Reddit, Vimeo, Maps), ida y vuelta entre pestañas y ratos quietos.
+- Hallazgo del uso simulado (sin cambio todavía): con 11 pestañas el navegador queda en ~1,2 GB con tope 1 GB aunque haya sólo 1 viva, 2 suspendidas y 8 descartadas. Lo que sobra es el proceso de GPU: 200 MB antes de abrir Google Maps y 450–500 MB después, mientras Maps sigue suspendida (y comparte renderer con la búsqueda de Google por el proceso por sitio). El tope no la descarta porque se usó hace menos de 3 min (`BudgetKeepRecentMinutes`).
+
 ## 0.4.0 — 2026-11-08
 - **Una sola instancia** por carpeta de datos: abrir el navegador otra vez (acceso directo, link de otra app, `.html` desde el Explorador, `--private`) le pasa el pedido a la ventana abierta por un pipe sólo del usuario y termina en ~200 ms, sin ventanas ni log propio. Antes dos procesos escribían la misma sesión y los mismos favoritos.
 - **Navegador predeterminado**: menú ⋮ → "Hacer navegador predeterminado…" registra http/https/.htm/.html en HKCU (sin administrador) y abre Configuración para elegirlo; `--register-default` / `--unregister-default`. Los archivos `.html` pasados por línea de comandos se abren como `file:///`.

@@ -1,0 +1,62 @@
+# Uso real simulado (~9 min): sitios pesados, búsqueda, video, ir y volver entre pestañas, dejar pestañas quietas
+# para que se suspendan (60 s) y que el tope de RAM descarte. Corre oculta:
+#   dist\Navegador.exe --data-dir <carpeta temporal> --automation tools\smoke\uso-real.txt
+# Después: python -m metrics report <carpeta>\logs\session-*.jsonl (desde tools\metrics) y revisar errores en el log.
+wait 1500
+go clima en buenos aires
+wait 6000
+newtab https://www.youtube.com/
+wait 8000
+newtab https://github.com/MicrosoftEdge/WebView2Feedback/issues
+wait 6000
+newtab https://www.lanacion.com.ar/
+wait 10000
+newtab https://listado.mercadolibre.com.ar/notebook
+wait 8000
+newtab https://es.wikipedia.org/wiki/Argentina
+wait 6000
+newtab https://www.reddit.com/r/argentina/
+wait 8000
+shot u1-siete-pestanas
+# volver a la primera mientras las demás siguen abiertas
+tab 0
+wait 3000
+newtab https://vimeo.com/1083228218
+wait 10000
+js document.querySelector('video') ? 'video' : 'sin-video'
+# quietas más de 60 s: las de fondo se suspenden
+wait 75000
+shot u2-tras-75s
+tab 3
+wait 4000
+shot u3-vuelve-lanacion
+tab 1
+wait 4000
+js window.scrollTo(0, 2500); window.scrollY
+tab 5
+wait 3000
+go https://es.wikipedia.org/wiki/Buenos_Aires
+wait 5000
+newtab https://www.google.com/maps/place/Buenos+Aires
+wait 12000
+newtab https://docs.github.com/es
+wait 6000
+newtab https://www.infobae.com/
+wait 10000
+shot u4-doce-pestanas
+wait 90000
+shot u5-tras-90s
+tab 2
+wait 4000
+tab 4
+wait 4000
+tab 6
+wait 4000
+tab 1
+wait 4000
+js window.scrollY
+shot u6-volver-youtube
+tab 0
+wait 120000
+shot u7-final
+close
