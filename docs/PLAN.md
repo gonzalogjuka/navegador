@@ -91,3 +91,39 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 
 ## Fuera de alcance por ahora
 Motor propio, extensiones, sincronización entre equipos, perfiles múltiples, macOS/Linux.
+
+## Skills y pruebas pendientes (2026-11-12)
+
+Skills instaladas en `~/.agents/skills` para este repo (revisadas antes de instalar; detalle en `~/.omp/agent/AGENTS.md`).
+Regla que vale para todo lo de abajo: **ninguna prueba puede mostrar ventanas, robar el foco ni mandar teclas/clics al
+escritorio** (`--automation`, `--data-dir` temporal, `tools/compare/cuando_libre.py` para lo pesado).
+
+### Estado de partida
+- **Sin commitear desde el 8/11:** `MainWindow.Snapshots.cs` + `MainWindow.Automation.cs` agregan `CapturePreviewAsync` con
+  tope de 5 s (la captura no terminaba nunca si la página no dibujaba y colgaba la prueba). Falta: compilar, correr
+  `tools/smoke/snapshot.txt` y `uso-real.txt`, entrada en CHANGELOG y commit.
+- Herramientas: `wpr.exe` viene con Windows; **faltan** WPA (Windows Performance Toolkit del ADK), `dotnet-counters`,
+  `dotnet-trace`, `dotnet-dump` (`dotnet tool install -g …`), Semgrep y CodeQL CLI. Todo gratis.
+- Tests: xUnit 2.5.3 en `tests/Navegador.Tests` (Core, Data, Snapshot) con `coverlet.collector` ya referenciado.
+
+### Qué hacer, con qué skill
+| # | Qué | Skill | Resultado esperado |
+|---|---|---|---|
+| 1 | Archivos de `Navegador.Core` sin test propio (`BlockList`, `HttpsUpgrade`, `PageCosts`, `UrlInput`, `InternalPages`, `EventLog`…) | `find-untested-sources` | Lista de huecos |
+| 2 | Cobertura real de Core (`dotnet test --collect "XPlat Code Coverage"`) y CRAP de lo más riesgoso (`HibernationPolicy`, `PageCosts`) | `run-tests`, `coverage-analysis`, `crap-score` | Qué métodos complejos no están cubiertos |
+| 3 | ¿Los tests atrapan un cambio de comportamiento? Pseudo-mutaciones sobre la política de hibernación, el tope de RAM y HTTPS primero | `test-gap-analysis` | Casos que faltan; escribirlos sólo si atrapan bugs plausibles |
+| 4 | Calidad de los tests existentes (aserciones flojas, tiempos, orden) | `test-anti-patterns`, `assertion-quality` | Reporte por severidad |
+| 5 | Rendimiento del código propio: `MainWindow.xaml.cs` (1347 líneas), `AppServices`, el filtro de peticiones de `BlockList` (corre en cada petición) | `analyzing-dotnet-performance`; `microbenchmarking` (BenchmarkDotNet) si `BlockList` aparece caliente | Asignaciones y async evitables en la ventana (~95 MB) y el proceso principal |
+| 6 | Memoria administrada vs nativa de `Navegador.exe` durante `uso-real.txt` | `dotnet-trace-collect` (`dotnet-counters`, `dotnet-trace`, `dotnet-gcdump`) | Saber si los ~95 MB de la ventana son GC, WPF o nativos |
+| 7 | **Piso de GPU de ~200 MB** que no baja nunca (y 450–500 MB con Maps suspendida) | `dotnet-performance` (guía de Windows + GPU: WPR/WPA, ETW) | Explicar de qué es y si `MemoryUsageTargetLevel`/descartes pueden bajarlo |
+| 8 | Volcado automático si la app cae (caídas por RTSS, cuelgues) | `dump-collect` | `DOTNET_DbgEnableMiniDump` o WER LocalDumps para `Navegador.exe`, documentado en el README |
+| 9 | Configuración peligrosa: `BrowserArguments` editable en `settings.json` (flags arbitrarios a WebView2), `AllowSites`, ventanas nuevas, descargas, `file://` | `sharp-edges` | Lista de "footguns" con arreglo |
+| 10 | Análisis estático de C# | `semgrep` (siempre `--metrics=off`) y/o `codeql` (build de la solución) → `sarif-parsing` | Hallazgos de seguridad triados |
+| 11 | **Piloto de tests de interfaz** con FlaUI (UIA3): proyecto `tests/Navegador.UiTests`; los `x:Name` de `MainWindow.xaml` (29) ya son AutomationId. Falta un modo que deje la app viva, oculta y sin script (hoy `--automation` corre pasos y se cierra) | `flaui-tests` | 1 test (abrir pestaña, menú ⋮, cerrar) que pase **sin que aparezca nada en pantalla**; si algo se ve, se descarta FlaUI |
+
+### Funciones sin probar de verdad (candidatas para 11 o para `--automation`)
+- No dormir la pestaña que suena (`HibernationPolicy`): sólo test unitario; probar con audio en silencio (volumen 0 / pestaña muteada).
+- Pantalla completa (F11 y videos).
+- Criterios de la fase 4 sin cifra en este archivo: `focus_gained`→`tab_active_ready` p95 < 300 ms y restaurar descartada p95 < 2 s; sacarlos de los logs con `python -m metrics report`.
+- Fase 3: todavía no hay logs de uso real con 0.4.x; leerlos cuando existan.
+- Fase 5d (ajustes con interfaz, importar favoritos, Ctrl+N, sugerencias en la barra): cada una con su prueba oculta al implementarse.
