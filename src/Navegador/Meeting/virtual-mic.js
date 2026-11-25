@@ -18,7 +18,10 @@
   const CAPTURE_RATE = 16000;
   const MAX_QUEUE_S = 1.0;      // voz traducida atrasada más que esto: se descarta el pedazo en vez de acumular retraso
   const TAP_FRAMES = 1024;      // ~21 ms a 48 kHz: lo que tarda en salir cada pedazo de voz hacia el traductor
-  const JITTER_S = 0.04;        // colchón al arrancar a reproducir la traducida (absorbe la variación de llegada)
+  // Colchón al arrancar a reproducir la traducida (absorbe la variación de llegada). Empieza chico (menos demora) y
+  // crece de a 20 ms con cada corte, hasta 150 ms: con la página cargada (Meet) se acomoda solo para no cortar.
+  const JITTER_MIN_S = 0.04, JITTER_STEP_S = 0.02, JITTER_MAX_S = 0.15;
+  let jitter = JITTER_MIN_S;
   const realGetUserMedia = md.getUserMedia.bind(md);
   const post = m => { try { wv.postMessage(m); } catch (e) { /* la pestaña se está cerrando */ } };
 
@@ -30,6 +33,7 @@
   // Ida y vuelta (sólo tiene sentido con un traductor que contesta un pedazo por pedazo, como el de prueba).
   const sentAt = [];
   const rtts = [];
+  let gaps = 0;                 // la voz traducida se cortó porque el pedazo siguiente llegó tarde (se oye como un clic)
   const sessions = new Set();
 
   function context() {
@@ -86,7 +90,13 @@
     if (!data.length) return;
     const now = ctx.currentTime;
     if (sentAt.length) { rtts.push(performance.now() - sentAt.shift()); if (rtts.length > 50) rtts.shift(); }
-    if (playAt < now + 0.005) playAt = now + JITTER_S;     // el flujo se cortó: arranca con un margen chico
+    if (playAt < now + 0.005) {                            // el flujo se cortó: arranca con un margen chico
+      if (playAt > 0 && now - playAt < 0.5) {               // corte corto en medio de una frase (no una pausa)
+        gaps++;
+        jitter = Math.min(JITTER_MAX_S, jitter + JITTER_STEP_S);
+      }
+      playAt = now + jitter;
+    }
     if (playAt - now > MAX_QUEUE_S) { dropped++; return; } // demasiado atrasado
     const buf = ctx.createBuffer(1, data.length, rate);
     buf.copyToChannel(data, 0);
@@ -168,8 +178,9 @@
     if (!m || typeof m !== 'object') return;
     if (m.t === 'mode') {
       mode = { original: +m.original || 0, translated: +m.translated || 0, capture: !!m.capture };
-      sentAt.length = 0; // otro traductor u otro modo: la ida y vuelta se empieza a medir de nuevo
+      sentAt.length = 0; // otro traductor u otro modo: la ida y vuelta y los cortes se empiezan a medir de nuevo
       rtts.length = 0;
+      gaps = 0;
       applyMode();
     } else if (m.t === 'play' && typeof m.pcm === 'string') {
       play(m.pcm, m.rate > 3000 ? m.rate : CAPTURE_RATE);
@@ -177,8 +188,8 @@
       post({
         t: 'state', sessions: sessions.size, audio: ctx ? ctx.state : 'none', mode, dropped,
         rttMs: rtts.length ? Math.round([...rtts].sort((a, b) => a - b)[rtts.length >> 1]) : null, // mediana de los últimos 50
-        rttMaxMs: rtts.length ? Math.round(Math.max(...rtts)) : null,
-        tapMs: ctx ? Math.round(TAP_FRAMES / ctx.sampleRate * 1000) : null, jitterMs: JITTER_S * 1000,
+        rttMaxMs: rtts.length ? Math.round(Math.max(...rtts)) : null, gaps,
+        tapMs: ctx ? Math.round(TAP_FRAMES / ctx.sampleRate * 1000) : null, jitterMs: Math.round(jitter * 1000),
         outputLatencyMs: ctx ? Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000) : null,
       });
     }

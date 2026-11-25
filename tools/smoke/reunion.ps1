@@ -55,7 +55,11 @@ $checks = [ordered]@{
     'traductor: se oye el tono (440 Hz)'      = { $m = $results['traductor']; $m -and $m.fraccion440 -gt 0.8 -and [math]::Abs($m.picoHz - 440) -le 10 }
     'traductor: la voz llegó al navegador'    = { $state -and $state.mic_chunks -gt 0 -and $state.play_chunks -gt 0 }
     'original: vuelve el micrófono'           = { $m = $results['original']; $m -and $m.fraccion440 -lt 0.3 -and $m.nivelMax -gt 0.01 }
-    'ambas: tono con original de fondo'       = { $m = $results['ambas']; $m -and $m.fraccion440 -gt 0.3 -and $m.fraccion440 -lt 0.999 -and $results['traductor'].fraccion440 -ge 0.999 }
+    # "Ambas" deja la voz original al 35 %: su energía fuera del tono tiene que ser ~12 % (0,35²) de la de "original".
+    'ambas: tono con original de fondo'       = { $m = $results['ambas']; $o = $results['original']; $m -and $o -and $o.resto -gt 0 -and
+                                                  $m.fraccion440 -gt 0.3 -and ($m.resto / $o.resto) -gt 0.04 -and ($m.resto / $o.resto) -lt 0.4 }
+    # La voz original filtrada daría ~1; un clic aislado (corte antes de que el colchón se adapte) da ~0,05.
+    'traductor: sólo el tono, sin la voz'     = { $m = $results['traductor']; $o = $results['original']; $m -and $o -and ($m.resto / $o.resto) -lt 0.1 }
     'se-desconecta: no queda muda'            = { $m = $results['se-desconecta']; $m -and $m.fraccion440 -lt 0.3 -and $m.nivelMax -gt 0.01 }
     'encendido: la reunión tiene canal'       = { (Get-Probe 'sonda-encendido') -gt 0 }
     'apagado: la página ya no tiene canal'    = { (Get-Probe 'sonda-apagado') -eq 0 }
@@ -70,6 +74,10 @@ foreach ($k in $checks.Keys) {
 }
 ''
 foreach ($f in 'sin-traductor', 'traductor', 'original', 'ambas', 'se-desconecta') { "{0,-14} {1}" -f $f, ($results[$f] | ConvertTo-Json -Compress) }
+if ($results['original'] -and $results['original'].resto -gt 0) {
+    "voz de fondo   ambas/original = {0:0.000} (esperado ~0,12) · traductor/original = {1:0.000} (esperado ~0; un clic suma ~0,05)" -f `
+        ($results['ambas'].resto / $results['original'].resto), ($results['traductor'].resto / $results['original'].resto)
+}
 if ($state) { "estado         mic_chunks=$($state.mic_chunks) play_chunks=$($state.play_chunks) $($state.state)" }
 foreach ($e in $errors) { "error          $($e | ConvertTo-Json -Compress)" }
 "captura        $(Join-Path $work 'shots\reunion.png')"

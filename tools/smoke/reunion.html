@@ -46,6 +46,8 @@ window.medicion = null;
       window.medicion = {
         micro: track.label, audio: ctx.state, muestras: n, picoHz: Math.round(best * binHz),
         fraccion440: total > 0 ? +(near / total).toFixed(3) : 0,
+        // Energía media fuera del tono (100–4000 Hz menos 440 ± 20): lo que no es el traductor de prueba.
+        resto: n ? +((total - near) / n * 1e6).toFixed(2) : 0,
         nivel: n ? +(sq / n).toFixed(4) : 0, nivelMax: +peakLevel.toFixed(4),
       };
       document.getElementById('out').textContent = JSON.stringify(window.medicion, null, 2);
