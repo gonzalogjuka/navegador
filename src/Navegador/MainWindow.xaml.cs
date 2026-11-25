@@ -82,6 +82,7 @@ public partial class MainWindow : Window
         PreviewKeyDown += OnPreviewKeyDown;
         _tick.Tick += OnTick;
         _app.Meetings.Changed += OnMeetingsChanged;
+        _app.Voz.Changed += OnMeetingsChanged;
     }
 
     private string WindowSuffix => _isPrivate ? "Navegador (privada)" : "Navegador";
@@ -166,6 +167,7 @@ public partial class MainWindow : Window
             _app.RetirePrivateProfile();
         }
         _app.Meetings.Changed -= OnMeetingsChanged;
+        _app.Voz.Changed -= OnMeetingsChanged;
         foreach (var t in _tabs) LeaveMeeting(t, null);
         foreach (var t in _tabs) t.WebView?.Dispose();
     }
@@ -364,6 +366,17 @@ public partial class MainWindow : Window
                 }
             }
         }
+        // Sitio de reuniones: modo reunión solo, antes de que cargue (fase 7.2). Al irse a otro sitio, se apaga solo.
+        var meetingHost = BrowserTab.HostOf(uri);
+        if (_settings.AutoMeeting && tab.InternalPage is null && !tab.InMeeting && MeetingSites.IsMeeting(meetingHost))
+        {
+            e.Cancel = true;
+            tab.CancelledNavigationId = e.NavigationId;
+            tab.CurrentNavigationId = e.NavigationId;
+            _ = AutoMeetingThenNavigateAsync(tab, core, uri);
+            return;
+        }
+        if (tab.InMeeting && tab.MeetingAuto && !MeetingSites.IsMeeting(meetingHost)) LeaveMeeting(tab, core);
         tab.CurrentNavigationId = e.NavigationId;
         if (tab.RestoreSpan is null) tab.LastScroll = null; // página nueva: el scroll anterior ya no corresponde
         var newHost = BrowserTab.HostOf(uri);

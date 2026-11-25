@@ -68,6 +68,8 @@ public sealed class BrowserTab : INotifyPropertyChanged
     public bool InMeeting { get => _inMeeting; set => Set(ref _inMeeting, value); }
     private bool _inMeeting;
     public MeetingVoice MeetingVoice { get; set; } = MeetingVoice.Auto;
+    /// <summary>El modo reunión lo prendió Astro solo (sitio de reuniones): se apaga solo al irse a otro sitio.</summary>
+    public bool MeetingAuto { get; set; }
     public string? MeetingScriptId { get; set; }
     public EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs>? MeetingHandler { get; set; }
     /// <summary>La página tomó el micrófono (virtual) y todavía no lo soltó.</summary>

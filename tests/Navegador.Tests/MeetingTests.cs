@@ -2,6 +2,25 @@ using Navegador.Core;
 
 namespace Navegador.Tests;
 
+public class MeetingSitesTests
+{
+    [Theory]
+    [InlineData("meet.google.com", true)]
+    [InlineData("teams.microsoft.com", true)]
+    [InlineData("teams.live.com", true)]
+    [InlineData("app.zoom.us", true)]
+    [InlineData("us02web.zoom.us", true)]
+    [InlineData("whereby.com", true)]
+    [InlineData("MEET.GOOGLE.COM.", true)]
+    [InlineData("google.com", false)]
+    [InlineData("mail.google.com", false)]
+    [InlineData("notzoom.us", false)]
+    [InlineData("zoom.us.evil.com", false)]
+    [InlineData(null, false)]
+    public void Recognizes_meeting_sites_only(string? host, bool meeting) =>
+        Assert.Equal(meeting, MeetingSites.IsMeeting(host));
+}
+
 public class MeetingMixTests
 {
     [Theory]

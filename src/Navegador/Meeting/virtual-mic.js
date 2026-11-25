@@ -16,7 +16,9 @@
   Object.defineProperty(window, KEY, { value: true });
 
   const CAPTURE_RATE = 16000;
-  const MAX_QUEUE_S = 1.0;      // voz traducida atrasada más que esto: se descarta el pedazo en vez de acumular retraso
+  // Voz traducida en cola: llega de a frases enteras (varios segundos de una vez), así que se encola; sólo si la cola
+  // pasa de 8 s se descarta lo nuevo, para no quedar hablando un minuto atrás de la persona.
+  const MAX_QUEUE_S = 8.0;
   const TAP_FRAMES = 1024;      // ~21 ms a 48 kHz: lo que tarda en salir cada pedazo de voz hacia el traductor
   // Colchón al arrancar a reproducir la traducida (absorbe la variación de llegada). Empieza chico (menos demora) y
   // crece de a 20 ms con cada corte, hasta 150 ms: con la página cargada (Meet) se acomoda solo para no cortar.

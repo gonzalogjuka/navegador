@@ -65,11 +65,46 @@ después); el navegador pone la plomería.
 | # | Qué | Estado |
 |---|---|---|
 | 6.1 | **Micrófono virtual** (spike): en la pestaña con modo reunión, `getUserMedia` devuelve una pista de audio armada por el navegador que mezcla tu voz original y la voz traducida que llega de la app; tu voz va a la app. Sin traductor conectado pasa la voz original (la reunión nunca queda muda). La pestaña en reunión nunca se duerme ni se descarta. | Hecho, sólo con prueba oculta (`tools/smoke/reunion.ps1`, 10/10). Falta: reunión real (Meet/Teams/Zoom) |
-| 6.2 | **API local (capa B)**: WebSocket en `127.0.0.1` sólo para apps de la PC (se rechaza toda conexión con `Origin`, o sea páginas web); cada app pide permiso una vez y se aprueba/revoca en el navegador. Expone el audio del modo reunión (mic → app, voz traducida → reunión), subtítulos, pestañas y texto de la página. Cliente de ejemplo en `tools/integraciones/`. | Pendiente |
-| 6.3 | **Servidor MCP** sobre la misma API, para que Claude u otro LLM maneje el navegador con permisos. | Pendiente |
+| 6.2 | **API local (capa B)**: WebSocket en `127.0.0.1` sólo para apps de la PC (se rechaza toda conexión con `Origin`, o sea páginas web); cada app pide permiso una vez y se aprueba/revoca en el navegador. Expone el audio del modo reunión (mic → app, voz traducida → reunión). Cliente de ejemplo en `tools/integraciones/Eco`; protocolo en `docs/API.md`. Pestañas y texto de la página pasan a 6.3. | Hecho (audio), con prueba oculta (`tools/smoke/integracion.ps1`, 10/10). Falta: app de traducción real |
+| 6.3 | **Servidor MCP** sobre la misma API, para que Claude u otro LLM maneje el navegador con permisos. | Hecho: `navegador-mcp.exe` (ver, leer, abrir, cambiar de pestaña, modo reunión), prueba oculta `tools/smoke/mcp.ps1` 10/10. Fuera por ahora: clics y escribir en formularios. Falta: probarlo con Claude Desktop/Code |
 | 6.4 | **Audio entrante**: capturar lo que dicen los demás (captura de audio por proceso de Windows 11) y mostrar subtítulos traducidos. | Pendiente |
 | 6.5 | **Panel lateral (capa C)**: integraciones como páginas web con manifiesto y permisos, que se duermen como una pestaña. | Pendiente |
 | 6.6 | **Extensiones de Chrome (capa A)**: soporte de WebView2 + página para instalar desde carpeta, activar y quitar. | Pendiente |
+
+### Fase 7: listo para usuarios no técnicos, de punta a punta (decidido 2026-11-25)
+
+**Objetivo único: doble clic en el instalador → entrar a una Meet → dar permisos de cámara y micrófono → la otra
+persona te escucha en inglés.** Sin compilar, sin configurar, sin conectar apps, sin botones.
+
+| # | Qué | Decisión |
+|---|---|---|
+| 7.1 | **Instalador** `NavegadorSetup.exe`: publicación autocontenida (no pide .NET), instala en `%LOCALAPPDATA%\Programs\Navegador`, accesos directos, desinstalar desde Configuración de Windows (HKCU, sin admin). | — |
+| 7.2 | **Modo reunión automático** en Meet, Teams web, Zoom web y Whereby: sin botón ni recarga (el botón queda para otros sitios). | Hecho (también Jitsi); probado en meet.jit.si |
+| 7.3 | **Traductor incorporado**: el motor de `gonzalogjuka/voz-en` (traducción es→en y voz inglesa Kokoro en WebGPU/WASM, panel de debug) **copiado** a este repo y adaptado; `voz-en` no se toca. Corre en una página interna oculta y arranca solo cuando la reunión toma el micrófono. | Hecho en `voz/`: Whisper base (GPU) + voz de Windows; 1,3 s mediana. Falta bajar RAM (~2,4 GB en reunión) |
+| 7.4 | **Reconocimiento de voz local**: Whisper en WebGPU (WASM si no hay GPU) en vez de Web Speech. Medido en WebView2: `SpeechRecognition` existe pero falla con `network` (no trae el servicio de Google/Microsoft); el reconocimiento de Windows sólo tiene inglés si no se instala un paquete de idioma. Whisper puede dar inglés directo (tarea *translate*) y ahorrar la traducción. | Hecho: Whisper base *translate* |
+| 7.5 | **Modelos**: se bajan la primera vez (instalador chico); en la primera reunión, "Preparando la traducción (una sola vez)…" con progreso; quedan en caché. | Hecho (~150 MB con voz de Windows) |
+
+Medido en WebView2 (2026-11-25): WebGPU con adaptador OK, `Translator` existe (falta ver si baja modelo), voces de
+Windows sólo salen por parlantes (no sirven para el micrófono virtual). Los modelos son de voz, locales, sin LLM ni
+cuenta: el navegador sigue andando completo sin ellos (regla de abajo).
+
+### Fase 8: traductor nativo, sólido, liviano y con prioridad (decidido 2026-11-25)
+
+La fase 7 probó que funciona (1,3 s de demora, Jitsi real) pero como JavaScript en una página oculta: ~2,4 GB de RAM en
+reunión, 23 MB de motor web y dependencia del manejo de GPU del motor de páginas. Gonzalo: "algo sólido, no un script,
+un apartado diferente, en C si hace falta, bien construido de punta a punta". Orden: 8.1 → 8.2 → 8.3; la calidad de
+traducción se ve después.
+
+| # | Qué | Criterio de hecho |
+|---|---|---|
+| 8.1 | **`astro-voz.exe`**: proyecto C# aparte (`src/Astro.Voz`) sobre whisper.cpp nativo con Whisper.net 1.9.x (runtimes Vulkan para GPU y CPU AVX2 de respaldo), VAD Silero nativo (`WhisperVadFactory`), voz inglesa de Windows (SAPI) adentro. Astro lo lanza al empezar una reunión y lo cierra al terminar; hablan por named pipe en binario (PCM 16 kHz de ida, PCM de vuelta, eventos de estado). Modelos ggml (Whisper base cuantizado + Silero) se bajan la primera vez con progreso. Se borra el motor JS (`voz/`, `src/Navegador/Voz/`, `VozEngine` web). | Misma prueba de punta a punta que la fase 7 (WAV en español como micrófono, página de prueba y meet.jit.si): demora ≤ 1,3 s mediana y **RAM del traductor medida** (meta 200–400 MB). Prueba automática en el repo, no en el scratchpad. |
+| 8.2 | **Prioridad a la voz**: proceso del traductor con prioridad alta y hilos de audio en MMCSS ("Pro Audio"); durante una reunión el tope de RAM de Astro cuenta al traductor y descarta antes las pestañas de fondo; la pestaña en reunión y el traductor nunca se tocan. | Prueba con muchas pestañas pesadas abiertas durante la reunión: la demora no sube y no se pierden frases; log con la RAM de cada parte. |
+| 8.3 | **Instalador** `AstroSetup.exe` (Inno Setup, LZMA, por usuario, sin admin): instala en `%LOCALAPPDATA%\Programs\Astro`, accesos directos, desinstalar desde Configuración; si falta .NET 8 Desktop Runtime lo baja e instala solo. Nombre visible "Astro". | ~30–40 MB; instalación limpia probada en una carpeta/usuario de prueba; desinstala sin dejar restos. |
+
+**Regla de la fase (Gonzalo, 2026-11-25): el navegador funciona completo sin ningún LLM ni IA.** Las integraciones
+(API local, MCP, panel lateral, extensiones) son opcionales y se enchufan desde afuera: nada del navegador las necesita
+para andar, ninguna función propia llama a un servicio de IA, y si no hay nada conectado todo sigue igual (el modo
+reunión manda tu voz original). El servidor MCP es un programa aparte que sólo usa la API pública, como cualquier otra app.
 
 Cambios a decisiones anteriores: las extensiones dejan de estar fuera de alcance; el canal página→app
 (`IsWebMessageEnabled`) se habilita **sólo** en la pestaña con modo reunión y sólo acepta mensajes de audio.

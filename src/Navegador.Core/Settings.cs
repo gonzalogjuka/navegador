@@ -29,6 +29,8 @@ public sealed class Settings
     /// <summary>API local para apps de la PC (traductor, LLMs): WebSocket en localhost, cada app con permiso.</summary>
     public bool ApiEnabled { get; set; } = true;
     public int ApiPort { get; set; } = 47800;
+    /// <summary>Modo reunión automático en Meet, Teams web, Zoom web, Whereby y Jitsi (fase 7.2).</summary>
+    public bool AutoMeeting { get; set; } = true;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

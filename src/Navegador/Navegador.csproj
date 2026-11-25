@@ -20,12 +20,22 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="blocklist.txt" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Meeting/virtual-mic.js" LogicalName="virtual-mic.js" />
+    <!-- Motor de traducción (se genera con: cd voz && npm install && node build.mjs) -->
+    <None Include="Voz/**" CopyToOutputDirectory="PreserveNewest" />
     <Resource Include="navegador.ico" />
   </ItemGroup>
 
+  <!-- Si falta el motor de traducción (clon nuevo), se genera solo: npm install + node build.mjs en voz/. -->
+  <Target Name="BuildVoz" BeforeTargets="BeforeBuild" Condition="!Exists('Voz/engine.js')">
+    <Exec Command="npm install --no-audit --no-fund &amp;&amp; node build.mjs" WorkingDirectory="../../voz" />
+    <ItemGroup>
+      <None Include="Voz/**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>

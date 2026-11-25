@@ -33,6 +33,9 @@ public sealed class ApiServer(AppServices app) : IDisposable
     public static readonly IReadOnlyDictionary<string, string> ScopeDescriptions = new Dictionary<string, string>
     {
         [IntegrationStore.MeetingAudio] = "recibir tu voz en las pestañas con modo reunión y mandar la voz traducida",
+        [ApiMethods.TabsRead] = "ver tus pestañas (título y dirección) y leer el texto de las páginas (nunca las de ventanas privadas)",
+        [ApiMethods.TabsControl] = "abrir sitios web y cambiar de pestaña",
+        [ApiMethods.MeetingControl] = "activar o desactivar el modo reunión",
     };
 
     public void Start()
@@ -238,6 +241,14 @@ internal sealed class ApiSession(ApiServer server, AppServices app, WebSocket ws
                 {
                     Send(new { type = "pong" });
                 }
+                else if (TryParseCall(data, out var id, out var method, out var args))
+                {
+                    var reply = await ApiMethods.CallAsync(scopes, method, args);
+                    app.Log.Event("api_call", ("app", _name), ("method", method), ("ok", reply.Error is null));
+                    Send(reply.Error is null
+                        ? (object)new { type = "result", id, result = reply.Result }
+                        : new { type = "result", id, error = reply.Error });
+                }
             }
         }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or IOException or JsonException) { }
@@ -302,6 +313,23 @@ internal sealed class ApiSession(ApiServer server, AppServices app, WebSocket ws
         if (m.TryGetProperty("wants", out var w) && w.ValueKind == JsonValueKind.Array)
             wants = w.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray();
         return true;
+    }
+
+    private static bool TryParseCall(byte[] data, out long id, out string method, out JsonElement args)
+    {
+        id = 0; method = ""; args = default;
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            var m = doc.RootElement;
+            if (m.ValueKind != JsonValueKind.Object || !m.TryGetProperty("type", out var t) || t.GetString() != "call") return false;
+            if (!m.TryGetProperty("id", out var i) || !i.TryGetInt64(out id)) return false;
+            if (!m.TryGetProperty("method", out var me) || me.GetString() is not { } name) return false;
+            method = name;
+            args = m.TryGetProperty("params", out var p) ? p.Clone() : default;
+            return true;
+        }
+        catch (JsonException) { return false; }
     }
 
     private static bool IsPing(byte[] data)

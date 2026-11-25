@@ -129,6 +129,18 @@ public partial class MainWindow
             case "apideny": AnswerApproval(false); break;
             case "forgetapps": ForgetApps(); break;
             case "waitapproval": await WaitUntilAsync(() => _approval is not null, "waitapproval"); break;
+            case "vozprueba":
+            {
+                // vozprueba <archivo de audio>[|consulta del motor, p. ej. asr=…&mode=mt&ttsDevice=wasm]: prende el motor, espera los modelos (la primera vez
+                // los baja) y traduce el archivo entero; tiempos por frase al log (voz_test).
+                var parts = arg.Split('|');
+                var query = parts.Length > 1 ? "?" + parts[1] : null; // p. ej. asr=onnx-community/whisper-small&mode=mt
+                _ = _app.Voz.StartAsync(_env!, this, query);
+                await WaitUntilAsync(() => _app.Voz.Ready, "vozprueba: modelos", TimeSpan.FromMinutes(20));
+                var r = await _app.Voz.TestAsync(await File.ReadAllBytesAsync(parts[0]), TimeSpan.FromMinutes(10));
+                _app.Log.Event("voz_test", ("result", r.GetRawText()));
+                break;
+            }
             case "waittranslator":
                 // Espera a que una app (traductor) se conecte ("on") o se vaya ("off"): las pruebas con apps externas
                 // se sincronizan con lo que pasa, no con tiempos fijos.
@@ -149,14 +161,15 @@ public partial class MainWindow
     }
 
     /// <summary>Espera hasta 30 s a que se cumpla la condición; si no, el paso falla (automation_error).</summary>
-    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    private static async Task WaitUntilAsync(Func<bool> condition, string what, TimeSpan? timeout = null)
     {
-        for (var i = 0; i < 300; i++)
+        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(30));
+        while (DateTime.UtcNow < until)
         {
             if (condition()) return;
             await Task.Delay(100);
         }
-        throw new TimeoutException($"{what}: no pasó en 30 s");
+        throw new TimeoutException($"{what}: no pasó en {(timeout ?? TimeSpan.FromSeconds(30)).TotalSeconds:0} s");
     }
 
     /// <summary>Lo mismo que escribir en la barra y apretar Enter: navega y pasa el foco a la página.</summary>

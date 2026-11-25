@@ -43,8 +43,19 @@ public sealed class MeetingHub
     public void Disconnect(IMeetingTranslator translator)
     {
         if (Translator != translator) return;
-        Translator = null;
+        // Se fue una app externa: vuelve el traductor incorporado si está listo.
+        Translator = BuiltIn is { Ready: true } b && b != translator ? b : null;
         Notify();
+    }
+
+    /// <summary>Traductor incorporado de Astro. Una app externa conectada por la API tiene prioridad.</summary>
+    public VozEngine? BuiltIn { get; set; }
+
+    /// <summary>El incorporado quedó listo: se conecta si no hay una app externa.</summary>
+    public void OfferBuiltIn(VozEngine engine)
+    {
+        BuiltIn = engine;
+        if (Translator is null) Connect(engine);
     }
 
     internal void Join(MainWindow window, BrowserTab tab)

@@ -15,3 +15,7 @@ obj/
 
 # Salida de dotnet publish (el acceso directo apunta acá)
 dist/
+
+# Motor de traducción (voz/): dependencias y lo que genera build.mjs
+voz/node_modules/
+src/Navegador/Voz/

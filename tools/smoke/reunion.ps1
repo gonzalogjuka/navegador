@@ -1,4 +1,4 @@
-# Prueba oculta del modo reunión (fase 6.1): micrófono virtual de punta a punta, sin tocar el micrófono real.
+﻿# Prueba oculta del modo reunión (fase 6.1): micrófono virtual de punta a punta, sin tocar el micrófono real.
 #   powershell -ExecutionPolicy Bypass -File tools/smoke/reunion.ps1 [-Exe dist\Navegador.exe] [-Keep]
 # Corre con --automation (ventana fuera de pantalla, sin foco) y una carpeta de datos temporal cuyo settings.json agrega
 # --use-fake-device-for-media-stream (micrófono falso de Chromium, que hace "bip") y

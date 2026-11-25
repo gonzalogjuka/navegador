@@ -34,12 +34,7 @@ public partial class MainWindow
         if (on)
         {
             if (tab.InternalPage is not null) return; // nueva pestaña, historial: no hay reunión
-            core.Settings.IsWebMessageEnabled = true;
-            tab.MeetingHandler = (_, e) => OnMeetingMessage(tab, e);
-            core.WebMessageReceived += tab.MeetingHandler;
-            tab.MeetingScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(VirtualMicScript);
-            tab.InMeeting = true;
-            _app.Meetings.Join(this, tab);
+            await EnterMeetingAsync(tab, core, auto: false);
         }
         else
         {
@@ -50,13 +45,40 @@ public partial class MainWindow
         RefreshMeeting();
     }
 
+    /// <summary>Pone la pestaña en modo reunión para el próximo documento (no recarga).</summary>
+    private async Task EnterMeetingAsync(BrowserTab tab, CoreWebView2 core, bool auto)
+    {
+        core.Settings.IsWebMessageEnabled = true;
+        tab.MeetingHandler = (_, e) => OnMeetingMessage(tab, e);
+        core.WebMessageReceived += tab.MeetingHandler;
+        tab.MeetingScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(VirtualMicScript);
+        tab.InMeeting = true;
+        tab.MeetingAuto = auto;
+        _app.Meetings.Join(this, tab);
+        if (_env is not null) _ = _app.Voz.StartAsync(_env, this); // empieza a preparar la traducción ya
+    }
+
+    /// <summary>
+    /// Modo reunión automático (fase 7.2): la pestaña va a un sitio de reuniones. Se cancela esa navegación, se prende
+    /// el modo y se vuelve a navegar a la misma dirección: la página carga ya con el micrófono virtual, sin recargar.
+    /// </summary>
+    private async Task AutoMeetingThenNavigateAsync(BrowserTab tab, CoreWebView2 core, string uri)
+    {
+        await EnterMeetingAsync(tab, core, auto: true);
+        _log.Event("meeting_auto", ("tab_id", tab.Id), ("host", BrowserTab.HostOf(uri)));
+        core.Navigate(uri);
+        RefreshMeeting();
+    }
+
     /// <summary>Saca la pestaña del modo reunión sin recargar (también al cerrarla o al perder su WebView).</summary>
     private void LeaveMeeting(BrowserTab tab, CoreWebView2? core)
     {
         if (!tab.InMeeting) return;
         tab.InMeeting = false;
+        tab.MeetingAuto = false;
         tab.MeetingMicLive = false;
         _app.Meetings.Leave(tab);
+        if (_app.Meetings.SessionCount == 0) _app.Voz.StopSoon();
         if (core is null) return;
         try
         {
@@ -181,7 +203,9 @@ public partial class MainWindow
         var mix = MeetingMix.For(meeting.MeetingVoice, _app.Meetings.TranslatorConnected);
         var where = meeting == tab ? "" : $" en «{meeting.Title}»";
         string text;
-        if (!_app.Meetings.TranslatorConnected)
+        if (!_app.Meetings.TranslatorConnected && _app.Voz.Status is { } preparing)
+            text = $"● Reunión{where}: {preparing} · mientras, va tu voz original";
+        else if (!_app.Meetings.TranslatorConnected)
             text = mix.TranslatorMissing
                 ? $"● Reunión{where}: sin traductor conectado, va tu voz original"
                 : $"● Reunión{where}: sin traductor, va tu voz original";

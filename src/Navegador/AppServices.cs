@@ -16,6 +16,9 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
     public EventLog Log { get; private set; } = EventLog.Off;
     /// <summary>Pestañas en modo reunión de todas las ventanas y el traductor conectado (fase 6).</summary>
     public Meeting.MeetingHub Meetings { get; } = new();
+    /// <summary>Traductor incorporado (Whisper + Kokoro locales): se prende sólo mientras hay una reunión.</summary>
+    public Meeting.VozEngine Voz => _voz ??= new Meeting.VozEngine(this);
+    private Meeting.VozEngine? _voz;
     /// <summary>API local para apps de la PC; null si está apagada en los ajustes.</summary>
     public Api.ApiServer? Api { get; set; }
 

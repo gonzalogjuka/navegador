@@ -1,4 +1,4 @@
-# Prueba oculta de la API local (fase 6.2) con el modo reunión: el traductor es una app aparte que se conecta por
+﻿# Prueba oculta de la API local (fase 6.2) con el modo reunión: el traductor es una app aparte que se conecta por
 # WebSocket (tools/integraciones/Eco, modo tono), como lo hará la app de traducción real.
 #   powershell -ExecutionPolicy Bypass -File tools/smoke/integracion.ps1 [-Exe dist\Navegador.exe] [-Keep]
 # Navegador oculto (--automation) con carpeta temporal, micrófono falso de Chromium y la API en un puerto libre al azar para
