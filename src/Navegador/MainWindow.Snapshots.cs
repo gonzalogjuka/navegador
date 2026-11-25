@@ -36,10 +36,9 @@ public partial class MainWindow
         try
         {
             Directory.CreateDirectory(_app.Paths.Snapshots);
-            using var ms = new MemoryStream();
-            await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Jpeg, ms);
+            using var ms = await CapturePreviewAsync(core, CoreWebView2CapturePreviewImageFormat.Jpeg);
             if (_closing) return; // la ventana se cerró mientras se sacaba: la sesión ya se guardó sin esta foto
-            if (ms.Length == 0 || !_tabs.Contains(tab)) { span.End(false); return; }
+            if (ms is null || ms.Length == 0 || !_tabs.Contains(tab)) { span.End(false); return; }
             var tmp = SnapshotPath(name) + ".tmp";
             await File.WriteAllBytesAsync(tmp, ms.ToArray());
             File.Move(tmp, SnapshotPath(name), overwrite: true);
@@ -50,6 +49,27 @@ public partial class MainWindow
         {
             span.End(false);
         }
+    }
+
+    private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Foto de lo que muestra la página, o null si no llega en CaptureTimeout: CapturePreviewAsync no termina nunca si
+    /// la página no dibuja (pasó con la ventana sin foco y las 11 pestañas vivas, y colgó la prueba). Si llega tarde, el
+    /// stream se libera solo.
+    /// </summary>
+    private static async Task<MemoryStream?> CapturePreviewAsync(CoreWebView2 core, CoreWebView2CapturePreviewImageFormat format)
+    {
+        var ms = new MemoryStream();
+        var capture = core.CapturePreviewAsync(format, ms);
+        if (await Task.WhenAny(capture, Task.Delay(CaptureTimeout)) != capture)
+        {
+            _ = capture.ContinueWith(_ => ms.Dispose(), TaskScheduler.Default);
+            return null;
+        }
+        await capture;
+        ms.Position = 0;
+        return ms;
     }
 
     /// <summary>Muestra la foto de la pestaña que despierta. Devuelve false si no hay.</summary>

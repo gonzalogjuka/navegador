@@ -188,10 +188,9 @@ public partial class MainWindow
         BitmapSource? page = null;
         if (_active?.Core is { } core && _active.WebView?.Visibility == Visibility.Visible)
         {
-            using var ms = new MemoryStream();
-            await core.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, ms);
-            ms.Position = 0;
-            page = BitmapFrame.Create(ms, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            using var ms = await CapturePreviewAsync(core, Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png);
+            if (ms is not null) page = BitmapFrame.Create(ms, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            else _app.Log.Event("automation_error", ("cmd", "shot"), ("message", "la página no dibujó en 5 s; captura sin página"));
         }
 
         var dv = new DrawingVisual();
