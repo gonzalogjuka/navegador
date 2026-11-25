@@ -14,6 +14,18 @@ public sealed class AppServices(AppPaths paths, Settings settings, BlockList blo
     public Settings Settings { get; } = settings;
     public BlockList BlockList { get; } = blockList;
     public EventLog Log { get; private set; } = EventLog.Off;
+    /// <summary>Pestañas en modo reunión de todas las ventanas y el traductor conectado (fase 6).</summary>
+    public Meeting.MeetingHub Meetings { get; } = new();
+    /// <summary>API local para apps de la PC; null si está apagada en los ajustes.</summary>
+    public Api.ApiServer? Api { get; set; }
+
+    /// <summary>Pedido de permiso de una app local: lo muestra la ventana normal (o la que haya).</summary>
+    public Task<bool> AskApprovalAsync(string appName, IReadOnlyList<string> scopes)
+    {
+        var windows = System.Windows.Application.Current.Windows.OfType<MainWindow>().ToList();
+        var w = windows.FirstOrDefault(m => m.IsActive && !m.IsPrivate) ?? windows.FirstOrDefault(m => !m.IsPrivate) ?? windows.FirstOrDefault();
+        return w is null ? Task.FromResult(false) : w.AskApprovalAsync(appName, scopes);
+    }
 
     public void EnsureLog()
     {

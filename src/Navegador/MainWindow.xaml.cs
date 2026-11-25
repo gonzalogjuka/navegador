@@ -81,6 +81,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         PreviewKeyDown += OnPreviewKeyDown;
         _tick.Tick += OnTick;
+        _app.Meetings.Changed += OnMeetingsChanged;
     }
 
     private string WindowSuffix => _isPrivate ? "Navegador (privada)" : "Navegador";
@@ -164,6 +165,8 @@ public partial class MainWindow : Window
             catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
             _app.RetirePrivateProfile();
         }
+        _app.Meetings.Changed -= OnMeetingsChanged;
+        foreach (var t in _tabs) LeaveMeeting(t, null);
         foreach (var t in _tabs) t.WebView?.Dispose();
     }
 
@@ -428,6 +431,11 @@ public partial class MainWindow : Window
             e.State = CoreWebView2PermissionState.Deny;
             _log.Event("permission_denied", ("kind", "notifications"), ("host", BrowserTab.HostOf(e.Uri)));
         }
+        else if (_app.AutomationScript is not null
+                 && e.PermissionKind is CoreWebView2PermissionKind.Microphone or CoreWebView2PermissionKind.Camera)
+        {
+            e.State = CoreWebView2PermissionState.Allow; // prueba oculta: dispositivos falsos de Chromium, sin diálogo
+        }
         // El resto (cámara, micrófono, ubicación…) lo pregunta WebView2 con su diálogo.
     }
 
@@ -585,6 +593,7 @@ public partial class MainWindow : Window
     private void DisposeWebView(BrowserTab tab)
     {
         if (tab.WebView is not { } wv) return;
+        LeaveMeeting(tab, tab.Core);
         if (_findCore is not null && _findCore == tab.Core) _findCore = null;
         tab.WebView = null;
         Host.Children.Remove(wv);
@@ -926,6 +935,7 @@ public partial class MainWindow : Window
         StarButton.Foreground = bookmarked ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(0xE8, 0xEA, 0xED));
         StarButton.IsEnabled = !_isPrivate && url is not null && BrowserData.IsRecordable(url);
         RefreshShield();
+        RefreshMeeting();
     }
 
     private void RefreshStatus()
@@ -1335,6 +1345,8 @@ public partial class MainWindow : Window
             () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_app.Paths.Root}\"") { UseShellExecute = false })));
         if (!_isPrivate)
             menu.Items.Add(Item("Hacer navegador predeterminado…", null, MakeDefaultBrowser));
+        if (!_isPrivate && _app.Api is { } api)
+            menu.Items.Add(Item($"Olvidar apps conectadas ({api.GrantCount})…", null, ForgetApps, api.GrantCount > 0));
         if (_app.AutomationScript is not null)
         {
             // Prueba automática: el menú no se abre (Windows lo traería al borde de la pantalla); se dibuja en la captura.

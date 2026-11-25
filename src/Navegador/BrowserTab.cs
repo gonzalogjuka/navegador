@@ -64,7 +64,18 @@ public sealed class BrowserTab : INotifyPropertyChanged
     /// <summary>"Dormir ahora" del menú de la pestaña: no aplica a la activa ni a una ya descartada.</summary>
     public bool CanSleep => !_isActive && _state != TabState.Discarded;
 
-    public TabSnapshot Snapshot() => new(Id, IsActive, State, LastActiveUtc, PlayingAudio, KeepAliveUntilUtc > DateTime.UtcNow);
+    /// <summary>Modo reunión: micrófono virtual inyectado y canal de audio con el navegador (ver MainWindow.Meeting.cs).</summary>
+    public bool InMeeting { get => _inMeeting; set => Set(ref _inMeeting, value); }
+    private bool _inMeeting;
+    public MeetingVoice MeetingVoice { get; set; } = MeetingVoice.Auto;
+    public string? MeetingScriptId { get; set; }
+    public EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs>? MeetingHandler { get; set; }
+    /// <summary>La página tomó el micrófono (virtual) y todavía no lo soltó.</summary>
+    public bool MeetingMicLive { get; set; }
+    public long MeetingMicChunks { get; set; }
+    public long MeetingPlayChunks { get; set; }
+
+    public TabSnapshot Snapshot() => new(Id, IsActive, State, LastActiveUtc, PlayingAudio, KeepAliveUntilUtc > DateTime.UtcNow, InMeeting);
 
     public static string? HostOf(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var u) && !string.IsNullOrEmpty(u.Host) ? u.Host.ToLowerInvariant() : null;

@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Reunión de prueba</title>
+<!--
+  Hace de sitio de reuniones: pide el micrófono con getUserMedia (como Meet) y analiza lo que recibe, que es lo que
+  escucharía la otra persona. window.medicion: pico de frecuencia, fracción de la energía cerca de 440 Hz (el tono del
+  traductor de prueba) y nivel. window.reset() vuelve a empezar a acumular. Lo usa tools/smoke/reunion.ps1.
+-->
+<body style="font: 14px Segoe UI, sans-serif; padding: 24px">
+<h1>Reunión de prueba</h1>
+<pre id="out">esperando el micrófono…</pre>
+<script>
+window.medicion = null;
+(async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const track = stream.getAudioTracks()[0];
+    const ctx = new AudioContext();
+    const an = ctx.createAnalyser();
+    an.fftSize = 8192;
+    an.smoothingTimeConstant = 0;
+    ctx.createMediaStreamSource(stream).connect(an);
+    const binHz = ctx.sampleRate / an.fftSize;
+    const db = new Float32Array(an.frequencyBinCount);
+    const acc = new Float64Array(an.frequencyBinCount);
+    const td = new Float32Array(an.fftSize);
+    let n = 0, sq = 0, peakLevel = 0;
+    window.reset = () => { acc.fill(0); n = 0; sq = 0; peakLevel = 0; };
+    setInterval(() => {
+      an.getFloatFrequencyData(db);
+      for (let i = 0; i < db.length; i++) acc[i] += Math.pow(10, db[i] / 10);
+      an.getFloatTimeDomainData(td);
+      let s = 0;
+      for (const v of td) s += v * v;
+      const r = Math.sqrt(s / td.length);
+      sq += r; peakLevel = Math.max(peakLevel, r);
+      n++;
+      let best = 0, near = 0, total = 0;
+      for (let i = 0; i < acc.length; i++) {
+        const hz = i * binHz;
+        if (hz < 100 || hz > 4000) continue;
+        total += acc[i];
+        if (Math.abs(hz - 440) <= 20) near += acc[i];
+        if (acc[i] > acc[best]) best = i;
+      }
+      window.medicion = {
+        micro: track.label, audio: ctx.state, muestras: n, picoHz: Math.round(best * binHz),
+        fraccion440: total > 0 ? +(near / total).toFixed(3) : 0,
+        nivel: n ? +(sq / n).toFixed(4) : 0, nivelMax: +peakLevel.toFixed(4),
+      };
+      document.getElementById('out').textContent = JSON.stringify(window.medicion, null, 2);
+    }, 100);
+  } catch (e) {
+    window.medicion = { error: String(e && e.message || e) };
+    document.getElementById('out').textContent = 'error: ' + window.medicion.error;
+  }
+})();
+</script>

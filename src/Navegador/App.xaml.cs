@@ -67,6 +67,12 @@ public partial class App : Application
         _services.DeletePrivateProfiles();
         var services = _services;
         _instance.Listen(request => Dispatcher.InvokeAsync(() => services.HandleRequest(request)));
+        if (settings.ApiEnabled)
+        {
+            services.EnsureLog(); // conexiones y permisos de apps quedan en el log
+            services.Api = new Api.ApiServer(services) { Approve = services.AskApprovalAsync };
+            services.Api.Start();
+        }
         _services.OpenWindow(url, isPrivate);
     }
 
@@ -81,6 +87,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         if (_services?.NormalWindowOpened == true) _services.SaveData();
+        _services?.Api?.Dispose();
         _services?.DeletePrivateProfilesOnExit();
         _services?.Log.Event("record_stop");
         _services?.Log.Dispose();

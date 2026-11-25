@@ -13,7 +13,9 @@ public enum TabState
 public enum HibernateAction { LowerMemory, Suspend, Discard }
 
 /// <param name="KeepAlive">No se puede descartar (p. ej. tiene un formulario escrito sin enviar); sí suspender.</param>
-public readonly record struct TabSnapshot(int Id, bool IsActive, TabState State, DateTime LastActiveUtc, bool PlayingAudio, bool KeepAlive = false);
+/// <param name="InMeeting">Modo reunión: la pestaña nunca baja de memoria, ni se duerme ni se descarta.</param>
+public readonly record struct TabSnapshot(int Id, bool IsActive, TabState State, DateTime LastActiveUtc, bool PlayingAudio, bool KeepAlive = false,
+    bool InMeeting = false);
 
 public readonly record struct PolicyDecision(int TabId, HibernateAction Action, string Reason);
 
@@ -65,11 +67,11 @@ public static class HibernationPolicy
         {
             if (t.IsActive)
             {
-                if (focusLost && !activeAlreadyLowered && t.State == TabState.Live)
+                if (focusLost && !activeAlreadyLowered && t.State == TabState.Live && !t.InMeeting)
                     decisions.Add(new(t.Id, HibernateAction.LowerMemory, "focus_lost"));
                 continue;
             }
-            if (t.PlayingAudio || t.State == TabState.Discarded) continue;
+            if (t.PlayingAudio || t.InMeeting || t.State == TabState.Discarded) continue;
 
             var idle = nowUtc - t.LastActiveUtc;
             if (idle.TotalMinutes >= settings.DiscardAfterMinutes && !t.KeepAlive)
@@ -127,7 +129,7 @@ public static class HibernationPolicy
             .Select(t => t.Id)
             .ToHashSet();
         return tabs
-            .Where(t => !t.IsActive && !t.PlayingAudio && !t.KeepAlive && !Gone(t))
+            .Where(t => !t.IsActive && !t.PlayingAudio && !t.InMeeting && !t.KeepAlive && !Gone(t))
             .OrderBy(t => recent.Contains(t.Id))
             .ThenBy(t => t.LastActiveUtc)
             .Take(Math.Max(1, needed))

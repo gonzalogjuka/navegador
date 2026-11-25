@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <None Update="blocklist.txt" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Meeting/virtual-mic.js" LogicalName="virtual-mic.js" />
     <Resource Include="navegador.ico" />
   </ItemGroup>
 

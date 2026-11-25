@@ -26,6 +26,9 @@ public sealed class Settings
     public bool HttpsFirst { get; set; } = true;
     /// <summary>Rechaza los pedidos de notificaciones de los sitios sin preguntar.</summary>
     public bool BlockNotifications { get; set; } = true;
+    /// <summary>API local para apps de la PC (traductor, LLMs): WebSocket en localhost, cada app con permiso.</summary>
+    public bool ApiEnabled { get; set; } = true;
+    public int ApiPort { get; set; } = 47800;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
@@ -72,6 +75,7 @@ public sealed class Settings
         if (BudgetKeepRecentMinutes < 0) BudgetKeepRecentMinutes = d.BudgetKeepRecentMinutes;
         if (BudgetKeepRecentTabs < 0) BudgetKeepRecentTabs = d.BudgetKeepRecentTabs;
         if (string.IsNullOrWhiteSpace(SearchUrl)) SearchUrl = d.SearchUrl;
+        if (ApiPort is < 1024 or > 65535) ApiPort = d.ApiPort;
         BrowserArguments ??= "";
         AllowSites ??= [];
     }

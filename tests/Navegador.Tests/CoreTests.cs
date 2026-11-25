@@ -54,8 +54,21 @@ public class HibernationPolicyTests
     private static readonly DateTime Now = new(2026, 11, 7, 12, 0, 0, DateTimeKind.Utc);
     private static readonly Settings S = new() { SuspendAfterSeconds = 60, DiscardAfterMinutes = 15, FocusLostSeconds = 10, RamBudgetMb = 1000, BudgetKeepRecentMinutes = 3 };
 
-    private static TabSnapshot Tab(int id, double idleSeconds, TabState state = TabState.Live, bool active = false, bool audio = false, bool keep = false) =>
-        new(id, active, state, Now.AddSeconds(-idleSeconds), audio, keep);
+    private static TabSnapshot Tab(int id, double idleSeconds, TabState state = TabState.Live, bool active = false, bool audio = false, bool keep = false,
+        bool meeting = false) =>
+        new(id, active, state, Now.AddSeconds(-idleSeconds), audio, keep, meeting);
+
+    [Fact]
+    public void Meeting_tabs_are_never_lowered_slept_or_discarded()
+    {
+        // Reunión de fondo (estás en otra pestaña) y reunión activa con el foco en otra app: ninguna se toca,
+        // ni por inactividad, ni por foco perdido, ni por el tope de RAM.
+        TabSnapshot[] background = [Tab(1, 0, active: true), Tab(2, 3600, meeting: true)];
+        Assert.DoesNotContain(Decide(background, focusLost: Now.AddSeconds(-60), mem: 5000, pages: 3000), x => x.TabId == 2);
+
+        TabSnapshot[] active = [Tab(1, 0, active: true, meeting: true), Tab(2, 5)];
+        Assert.DoesNotContain(Decide(active, focusLost: Now.AddSeconds(-60)), x => x.TabId == 1);
+    }
 
     private static List<PolicyDecision> Decide(TabSnapshot[] tabs, DateTime? focusLost = null, double? mem = null, bool lowered = false,
         double pages = 0, BudgetDiscard? lastBudget = null) =>

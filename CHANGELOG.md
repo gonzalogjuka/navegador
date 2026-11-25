@@ -1,5 +1,15 @@
 # Changelog
 
+## Sin publicar — fase 6.1: modo reunión (micrófono virtual)
+**Primer paso hacia "hablo en español y en la reunión me escuchan en inglés".** Botón de micrófono en la barra: en esa pestaña, cuando el sitio pide el micrófono (Meet, Teams web, Zoom web, Jitsi…, con el permiso de siempre) recibe una pista armada por el navegador que mezcla tu voz original y la voz traducida que manda el traductor conectado. Tu voz va al traductor en PCM 16 kHz mono. Todavía no hay forma de conectar un traductor externo: eso es la API local (6.2); por ahora sólo el tono de prueba de las pruebas ocultas.
+- Qué escuchan los demás (clic en el botón con el modo activo): automático (traducida si hay traductor), sólo la traducida, traducida con tu voz de fondo, sólo la original. **La reunión nunca queda muda**: sin traductor conectado va la voz original, y la barra de estado avisa en naranja si pediste la traducida.
+- Para la página es el micrófono real: mismo nombre, ajustes y silenciar (silenciar en la reunión silencia también lo que va al traductor).
+- Activar o desactivar recarga la página: conviene hacerlo antes de entrar a la reunión.
+- La pestaña en reunión nunca baja de memoria, ni se duerme ni se descarta (`TabSnapshot.InMeeting`).
+- Seguridad: el canal página→app (`IsWebMessageEnabled`) se habilita sólo en la pestaña con modo reunión y se apaga al desactivarlo; del canal sólo se aceptan los mensajes del script, con tope de tamaño.
+- Prueba oculta `tools/smoke/reunion.ps1` (micrófono falso de Chromium + `tools/smoke/reunion.html` como sitio de reuniones, que mide lo que oiría la otra persona): 10 de 10 — sin traductor va el micrófono; con el tono de prueba sólo se oye el tono (440 Hz, 100 % de la energía) y la voz llegó al navegador (45 pedazos de ida y 45 de vuelta en ~4 s); "sólo original" y "se desconecta el traductor" vuelven al micrófono; "ambas" mezcla; la página, después de apagar el modo, y otra pestaña no hacen llegar ningún mensaje al navegador. Órdenes nuevas de `--automation`: `meeting on|off`, `meetingvoice`, `translator tone|off`, `meetingstate`, `msgprobe`.
+- **Sin probar:** una reunión real con otra persona (Meet, Teams, Zoom); lo prueba el usuario.
+
 ## 0.4.2 — 2026-11-08
 **El tope de RAM se cumple.** En 0.4.1 el navegador quedaba en ~1,2 GB con tope 1 GB aunque casi todo estuviera dormido. Con el mismo uso simulado (`tools/smoke/uso-real.txt`, 11 pestañas, ~7 min): promedio **1115 → 653 MB**, muestras sobre el tope **71 % → 6 %** (5 de 83, todas mientras carga Maps), en reposo **~1180 → ~490–640 MB**; los mismos 8 despertares, 0 errores.
 - **Suspender no alcanza, descartar sí.** Una pestaña suspendida conserva su renderer y su memoria de GPU (Google Maps suspendida: GPU en 450–500 MB; descartada: baja a ~180 en ~10 s). Las 2 pestañas usadas en los últimos 3 min ya no quedan fuera del tope: se descartan al final, cuando no queda otra. Nunca la activa, la que suena ni la que tiene algo escrito.

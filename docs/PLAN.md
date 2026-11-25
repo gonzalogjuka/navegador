@@ -53,6 +53,27 @@ Nota de medición: los procesos se llaman `msedgewebview2.exe` y los comparten o
 | 5b | Seguridad y privacidad: ver tabla abajo | Hecho (0.2.0) |
 | 5c | Una sola instancia y registro como navegador predeterminado | Hecho (0.4.0) |
 | 5d | Ajustes con interfaz (hoy: settings.json), importar favoritos de Chrome/Edge, segunda ventana normal (Ctrl+N), sugerencias en la barra de direcciones, GPC | Pendiente, según uso |
+| 6 | Integraciones y modo reunión (ver abajo) | En curso (desde 2026-11-25) |
+
+## Fase 6: integraciones y modo reunión (2026-11-25)
+
+Rumbo: gratis para todos y abierto a integraciones (Claude, otros LLM, apps propias). Objetivo que guía la fase:
+**en una reunión web (Meet, Teams web, Zoom web, Jitsi) hablás en español y la otra persona te escucha en inglés**,
+dando permiso de cámara y micrófono como siempre. La traducción la hace una app externa (la de Gonzalo, que se adapta
+después); el navegador pone la plomería.
+
+| # | Qué | Estado |
+|---|---|---|
+| 6.1 | **Micrófono virtual** (spike): en la pestaña con modo reunión, `getUserMedia` devuelve una pista de audio armada por el navegador que mezcla tu voz original y la voz traducida que llega de la app; tu voz va a la app. Sin traductor conectado pasa la voz original (la reunión nunca queda muda). La pestaña en reunión nunca se duerme ni se descarta. | Hecho, sólo con prueba oculta (`tools/smoke/reunion.ps1`, 10/10). Falta: reunión real (Meet/Teams/Zoom) |
+| 6.2 | **API local (capa B)**: WebSocket en `127.0.0.1` sólo para apps de la PC (se rechaza toda conexión con `Origin`, o sea páginas web); cada app pide permiso una vez y se aprueba/revoca en el navegador. Expone el audio del modo reunión (mic → app, voz traducida → reunión), subtítulos, pestañas y texto de la página. Cliente de ejemplo en `tools/integraciones/`. | Pendiente |
+| 6.3 | **Servidor MCP** sobre la misma API, para que Claude u otro LLM maneje el navegador con permisos. | Pendiente |
+| 6.4 | **Audio entrante**: capturar lo que dicen los demás (captura de audio por proceso de Windows 11) y mostrar subtítulos traducidos. | Pendiente |
+| 6.5 | **Panel lateral (capa C)**: integraciones como páginas web con manifiesto y permisos, que se duermen como una pestaña. | Pendiente |
+| 6.6 | **Extensiones de Chrome (capa A)**: soporte de WebView2 + página para instalar desde carpeta, activar y quitar. | Pendiente |
+
+Cambios a decisiones anteriores: las extensiones dejan de estar fuera de alcance; el canal página→app
+(`IsWebMessageEnabled`) se habilita **sólo** en la pestaña con modo reunión y sólo acepta mensajes de audio.
+Las pruebas siguen ocultas y con dispositivo de audio falso de Chromium: la reunión real con otra persona la prueba el usuario.
 
 ## Seguridad y privacidad (0.2.0)
 
@@ -90,7 +111,7 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 - WebView2 comparte el nombre de proceso `msedgewebview2.exe` con otras apps: medir siempre desde el log propio.
 
 ## Fuera de alcance por ahora
-Motor propio, extensiones, sincronización entre equipos, perfiles múltiples, macOS/Linux.
+Motor propio, sincronización entre equipos, perfiles múltiples, macOS/Linux. (Las extensiones pasaron a la fase 6.)
 
 ## Skills y pruebas pendientes (2026-11-12)
 

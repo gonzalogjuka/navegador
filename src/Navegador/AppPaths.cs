@@ -12,6 +12,10 @@ public sealed record AppPaths(string Root)
     public string Data => Path.Combine(Root, "data.json");
     public string Snapshots => Path.Combine(Root, "snapshots");
     public string Logs => Path.Combine(Root, "logs");
+    /// <summary>Apps locales autorizadas a usar la API (sólo hashes de sus tokens).</summary>
+    public string Integrations => Path.Combine(Root, "integrations.json");
+    /// <summary>Dirección de la API mientras el navegador está abierto (para que las apps la encuentren).</summary>
+    public string ApiInfo => Path.Combine(Root, "api.json");
 
     /// <summary>
     /// Prefijo de los perfiles de WebView2 de las ventanas privadas. Sólo se usan en modo InPrivate, así que no heredan

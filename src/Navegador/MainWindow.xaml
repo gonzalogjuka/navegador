@@ -185,12 +185,29 @@
                 </DockPanel>
             </Border>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,4,8,4">
+                <Button x:Name="MeetingButton" Style="{StaticResource IconButton}" Content="&#xE720;" Click="Meeting_Click"/>
                 <Button x:Name="MenuButton" Style="{StaticResource IconButton}" Content="&#xE712;" ToolTip="Menú" Click="Menu_Click"/>
             </StackPanel>
         </Grid>
 
+        <StackPanel Grid.Row="2">
+        <!-- Permiso para una app local que pide usar la API (fase 6.2) -->
+        <Border x:Name="ApprovalBar" Background="#1E3A5F" Padding="12,6" Visibility="Collapsed">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Margin="6,0,0,0" Click="ApprovalDeny_Click">
+                    <TextBlock Text="Rechazar" Foreground="#E8EAED"/>
+                </Button>
+                <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Background="#8AB4F8" Margin="12,0,0,0" Click="ApprovalAllow_Click">
+                    <TextBlock Text="Permitir" Foreground="#202124" FontWeight="SemiBold"/>
+                </Button>
+                <TextBlock DockPanel.Dock="Left" Text="&#xE71B;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#8AB4F8"
+                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock x:Name="ApprovalText" Foreground="#E8EAED" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
+        </Border>
+
         <!-- Buscar en la página -->
-        <Border x:Name="FindBar" Grid.Row="2" Background="{DynamicResource ToolbarBrush}" Padding="8,0,8,6" Visibility="Collapsed">
+        <Border x:Name="FindBar" Background="{DynamicResource ToolbarBrush}" Padding="8,0,8,6" Visibility="Collapsed">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Border Background="#202124" CornerRadius="12" Padding="10,0" Width="260">
                     <TextBox x:Name="FindBox" Background="Transparent" Foreground="#E8EAED" BorderThickness="0" CaretBrush="#E8EAED"
@@ -202,6 +219,7 @@
                 <Button Style="{StaticResource IconButton}" Content="&#xE711;" ToolTip="Cerrar (Esc)" Click="FindClose_Click"/>
             </StackPanel>
         </Border>
+        </StackPanel>
 
         <!-- Contenido: un WebView2 por pestaña viva; sólo el activo es visible -->
         <Grid x:Name="Host" Grid.Row="3" Background="White">
@@ -219,6 +237,8 @@
         <!-- Estado: lo que hace liviano al navegador, a la vista -->
         <DockPanel x:Name="StatusBar" Grid.Row="4" Background="#202124" LastChildFill="False">
             <TextBlock x:Name="MemoryText" DockPanel.Dock="Left" Margin="10,3" Foreground="#9AA0A6" VerticalAlignment="Center"/>
+            <TextBlock x:Name="MeetingText" DockPanel.Dock="Left" Margin="10,3" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
             <TextBlock x:Name="HintText" DockPanel.Dock="Left" Margin="10,3" Foreground="Orange" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
             <Button x:Name="ShieldButton" DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Margin="4,1" Click="Shield_Click"

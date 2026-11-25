@@ -13,12 +13,15 @@ namespace Navegador;
 ///   wait MS · go TEXTO · newtab [TEXTO] · tab N · sleep N · bookmark · find TEXTO · findclose · zoom +|-|0
 ///   history · menu · tabmenu N · closemenus · private · main · toprivate (ir a la ventana privada abierta) · shot NOMBRE · close
 ///   js CÓDIGO (resultado al log) · cleardata (borra datos sin preguntar)
+///   meeting on|off · meetingvoice auto|original|translated|both · translator tone|off · meetingstate (al log) · msgprobe
+///   apiapprove · apideny (contesta el pedido de permiso de una app) · forgetapps · waitapproval · waittranslator on|off
 ///   type TEXTO (escribe en el campo enfocado como una persona: eventos de entrada reales, vía CDP Input.insertText)
 /// Las capturas (interfaz + página + menú abierto, aunque la ventana esté tapada) van a &lt;datos&gt;\shots\NOMBRE.png.
 /// </summary>
 public partial class MainWindow
 {
     private ContextMenu? _openMenu;
+    private Meeting.TestToneTranslator? _testTranslator;
     /// <summary>Elemento debajo del cual se dibuja el menú en la captura (botón ⋮ o pestaña).</summary>
     private FrameworkElement? _menuAnchor;
 
@@ -115,10 +118,45 @@ public partial class MainWindow
             case "toprivate":
                 switchTo(Application.Current.Windows.OfType<MainWindow>().First(m => m._isPrivate));
                 break;
+            case "meeting": await SetMeetingAsync(_active!, arg == "on"); break;
+            case "meetingvoice": SetMeetingVoice(_active!, Enum.Parse<MeetingVoice>(arg, ignoreCase: true)); break;
+            case "translator":
+                // Traductor de prueba: "tone" conecta el tono de 440 Hz, "off" lo desconecta.
+                if (arg == "tone") _app.Meetings.Connect(_testTranslator ??= new Meeting.TestToneTranslator(_app.Meetings));
+                else if (_testTranslator is not null) _app.Meetings.Disconnect(_testTranslator);
+                break;
+            case "apiapprove": AnswerApproval(true); break;
+            case "apideny": AnswerApproval(false); break;
+            case "forgetapps": ForgetApps(); break;
+            case "waitapproval": await WaitUntilAsync(() => _approval is not null, "waitapproval"); break;
+            case "waittranslator":
+                // Espera a que una app (traductor) se conecte ("on") o se vaya ("off"): las pruebas con apps externas
+                // se sincronizan con lo que pasa, no con tiempos fijos.
+                await WaitUntilAsync(() => _app.Meetings.TranslatorConnected == (arg == "on"), "waittranslator " + arg);
+                break;
+            case "meetingstate": _active!.Core!.PostWebMessageAsJson("""{"t":"state"}"""); break;
+            case "msgprobe":
+                // Escucha el canal página→app de la pestaña activa: cada mensaje que llegue queda en el log
+                // (probe_message). Sirve para comprobar que fuera del modo reunión el canal no deja pasar nada.
+                var probed = _active!;
+                probed.Core!.WebMessageReceived += (_, e) =>
+                    _app.Log.Event("probe_message", ("tab_id", probed.Id), ("message", e.WebMessageAsJson));
+                break;
             case "shot": await ShotAsync(arg); break;
             case "close": Close(); break;
             default: throw new ArgumentException($"orden desconocida: {cmd}");
         }
+    }
+
+    /// <summary>Espera hasta 30 s a que se cumpla la condición; si no, el paso falla (automation_error).</summary>
+    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    {
+        for (var i = 0; i < 300; i++)
+        {
+            if (condition()) return;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException($"{what}: no pasó en 30 s");
     }
 
     /// <summary>Lo mismo que escribir en la barra y apretar Enter: navega y pasa el foco a la página.</summary>
