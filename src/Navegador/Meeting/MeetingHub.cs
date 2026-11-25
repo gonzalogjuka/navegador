@@ -49,10 +49,10 @@ public sealed class MeetingHub
     }
 
     /// <summary>Traductor incorporado de Astro. Una app externa conectada por la API tiene prioridad.</summary>
-    public VozEngine? BuiltIn { get; set; }
+    public VozTranslator? BuiltIn { get; set; }
 
     /// <summary>El incorporado quedó listo: se conecta si no hay una app externa.</summary>
-    public void OfferBuiltIn(VozEngine engine)
+    public void OfferBuiltIn(VozTranslator engine)
     {
         BuiltIn = engine;
         if (Translator is null) Connect(engine);

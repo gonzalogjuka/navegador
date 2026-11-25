@@ -1,7 +1,7 @@
 ﻿<Window x:Class="Navegador.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Navegador" Width="1280" Height="820" MinWidth="480" MinHeight="320"
+        Title="Astro" Width="1280" Height="820" MinWidth="480" MinHeight="320"
         Background="#202124" Foreground="#E8EAED" FontFamily="Segoe UI" FontSize="13"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Window.Resources>

@@ -20,7 +20,7 @@ $data = Join-Path $work 'datos'
 New-Item -ItemType Directory $data | Out-Null
 $probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $probe.Start()
 $port = $probe.LocalEndpoint.Port; $probe.Stop()   # puerto libre: no choca con otro navegador ni con otra corrida
-@{ BrowserArguments = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required'; ApiPort = $port } |
+@{ BrowserArguments = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required'; ApiPort = $port; VozEnabled = $false } |
     ConvertTo-Json | Set-Content (Join-Path $data 'settings.json') -Encoding UTF8
 
 # Eco compilado una vez (arranca en ~0,1 s, no como dotnet run).

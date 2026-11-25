@@ -78,9 +78,9 @@ persona te escucha en inglés.** Sin compilar, sin configurar, sin conectar apps
 
 | # | Qué | Decisión |
 |---|---|---|
-| 7.1 | **Instalador** `NavegadorSetup.exe`: publicación autocontenida (no pide .NET), instala en `%LOCALAPPDATA%\Programs\Navegador`, accesos directos, desinstalar desde Configuración de Windows (HKCU, sin admin). | — |
+| 7.1 | **Instalador** `NavegadorSetup.exe`: publicación autocontenida (no pide .NET), instala en `%LOCALAPPDATA%\Programs\Navegador`, accesos directos, desinstalar desde Configuración de Windows (HKCU, sin admin). | Reemplazado por 8.3 (`AstroSetup.exe`, hecho) |
 | 7.2 | **Modo reunión automático** en Meet, Teams web, Zoom web y Whereby: sin botón ni recarga (el botón queda para otros sitios). | Hecho (también Jitsi); probado en meet.jit.si |
-| 7.3 | **Traductor incorporado**: el motor de `gonzalogjuka/voz-en` (traducción es→en y voz inglesa Kokoro en WebGPU/WASM, panel de debug) **copiado** a este repo y adaptado; `voz-en` no se toca. Corre en una página interna oculta y arranca solo cuando la reunión toma el micrófono. | Hecho en `voz/`: Whisper base (GPU) + voz de Windows; 1,3 s mediana. Falta bajar RAM (~2,4 GB en reunión) |
+| 7.3 | **Traductor incorporado**: el motor de `gonzalogjuka/voz-en` (traducción es→en y voz inglesa Kokoro en WebGPU/WASM, panel de debug) **copiado** a este repo y adaptado; `voz-en` no se toca. Corre en una página interna oculta y arranca solo cuando la reunión toma el micrófono. | Hecho en `voz/`: Whisper base (GPU) + voz de Windows; 1,3 s mediana, ~2,4 GB de RAM en reunión. Reemplazado por el traductor nativo (8.1); `voz/` se borró |
 | 7.4 | **Reconocimiento de voz local**: Whisper en WebGPU (WASM si no hay GPU) en vez de Web Speech. Medido en WebView2: `SpeechRecognition` existe pero falla con `network` (no trae el servicio de Google/Microsoft); el reconocimiento de Windows sólo tiene inglés si no se instala un paquete de idioma. Whisper puede dar inglés directo (tarea *translate*) y ahorrar la traducción. | Hecho: Whisper base *translate* |
 | 7.5 | **Modelos**: se bajan la primera vez (instalador chico); en la primera reunión, "Preparando la traducción (una sola vez)…" con progreso; quedan en caché. | Hecho (~150 MB con voz de Windows) |
 
@@ -100,6 +100,45 @@ traducción se ve después.
 | 8.1 | **`astro-voz.exe`**: proyecto C# aparte (`src/Astro.Voz`) sobre whisper.cpp nativo con Whisper.net 1.9.x (runtimes Vulkan para GPU y CPU AVX2 de respaldo), VAD Silero nativo (`WhisperVadFactory`), voz inglesa de Windows (SAPI) adentro. Astro lo lanza al empezar una reunión y lo cierra al terminar; hablan por named pipe en binario (PCM 16 kHz de ida, PCM de vuelta, eventos de estado). Modelos ggml (Whisper base cuantizado + Silero) se bajan la primera vez con progreso. Se borra el motor JS (`voz/`, `src/Navegador/Voz/`, `VozEngine` web). | Misma prueba de punta a punta que la fase 7 (WAV en español como micrófono, página de prueba y meet.jit.si): demora ≤ 1,3 s mediana y **RAM del traductor medida** (meta 200–400 MB). Prueba automática en el repo, no en el scratchpad. |
 | 8.2 | **Prioridad a la voz**: proceso del traductor con prioridad alta y hilos de audio en MMCSS ("Pro Audio"); durante una reunión el tope de RAM de Astro cuenta al traductor y descarta antes las pestañas de fondo; la pestaña en reunión y el traductor nunca se tocan. | Prueba con muchas pestañas pesadas abiertas durante la reunión: la demora no sube y no se pierden frases; log con la RAM de cada parte. |
 | 8.3 | **Instalador** `AstroSetup.exe` (Inno Setup, LZMA, por usuario, sin admin): instala en `%LOCALAPPDATA%\Programs\Astro`, accesos directos, desinstalar desde Configuración; si falta .NET 8 Desktop Runtime lo baja e instala solo. Nombre visible "Astro". | ~30–40 MB; instalación limpia probada en una carpeta/usuario de prueba; desinstala sin dejar restos. |
+
+#### Fase 8: hecho y medido (2026-11-25)
+
+Misma prueba de punta a punta que la fase 7 (grabación en español como micrófono, página de prueba y `meet.jit.si`), ahora
+en el repo: `tools/smoke/voz.ps1`. Notebook común (i5-1235U, Intel Iris Xe, 16 GB). La fase 7 se volvió a medir el mismo
+día con el mismo método antes de borrar el motor web.
+
+| Qué | Fase 7 (motor web) | Fase 8 (`astro-voz.exe`) |
+|---|---|---|
+| De tu última palabra a la voz inglesa | mediana 1374 ms, peor 1529 ms | **mediana 750–775 ms, peor 846–954 ms** (Jitsi real: 763 / 941) |
+| Reconocimiento por frase | 908 ms (WebGPU) | **250–280 ms** (procesador, 6 hilos) |
+| RAM del traductor | ~2400 MB (1,3 GB la página + 1,15 GB la GPU) | **163–167 MB** de memoria física (privada: 205 MB) |
+| RAM total de Astro en la reunión | 2700–2900 MB | **470–500 MB** |
+| Listo para traducir (modelos ya bajados) | ~3,6 s | **~0,9–1,1 s** |
+| Descarga de la primera vez | ~150 MB | **58 MB** (Whisper base q5_1 + Silero), con SHA-256 verificado |
+| Motor que viaja con Astro | 23 MB de JavaScript/WASM | 63 MB instalado (58 son la biblioteca de Vulkan); instalador 8,1 MB |
+
+| # | Estado | Detalle |
+|---|---|---|
+| 8.1 | **Hecho** | `src/Astro.Voz` → `voz\astro-voz.exe`. Named pipe binario sólo para el usuario (`Navegador.Core/Voz/VozProtocol`), Silero por ventanas de 32 ms con estado por pestaña, Whisper base q5_1 con el contexto de audio recortado al largo de la frase (la clave de la velocidad: 250 ms contra 1,5 s con los 30 s enteros), tope de largo y filtro de bucles, voz de Windows adentro. Si se cae en una reunión, Astro lo relanza (hasta 3 veces, ya sin placa de video); si Astro desaparece, se cierra solo. Motor JS borrado (`voz/`, `VozEngine`, `HostVoice`). Prueba sin navegador: `astro-voz.exe --file audio.wav --models carpeta --out resultado.json`. |
+| 8.2 | **Hecho** | Proceso con prioridad alta y sin ahorro de energía; los dos hilos de audio en MMCSS ("Pro Audio"). El tope de RAM cuenta al traductor (memoria física). Con 6 pestañas pesadas abriéndose durante la reunión (Maps, YouTube, La Nación, Infobae, Mercado Libre, Wikipedia; `voz.ps1 -Carga`): **mediana 765 ms, peor 1015 ms, 11 de 11 frases**, 5 pestañas de fondo descartadas por el tope, la de la reunión intacta; el log trae la RAM de cada parte cada 5 s. Sin la prioridad la mediana ya era la misma (767 ms): en esta PC lo que mantiene la demora es que el traductor es liviano; la prioridad queda como seguro para PCs más cargadas. |
+| 8.3 | **Hecho** | `tools/instalador/armar.ps1` → `AstroSetup.exe`, **8,1 MB**. Por usuario, sin administrador, `%LOCALAPPDATA%\Programs\Astro`, accesos directos "Astro", desinstalar desde Configuración, registro como navegador. Si falta .NET 8 Desktop Runtime lo baja de Microsoft y lo instala (ese paso sí pide permiso de administrador: es de Windows). `tools/instalador/probar.ps1`: instala en una carpeta de prueba, corre `voz.ps1` con la copia instalada y desinstala: 15 de 15, sin restos. Nombre visible "Astro" (ventana, mensajes, Windows); el ejecutable y la carpeta de datos siguen siendo `Navegador`. |
+
+Decisiones tomadas midiendo (cambian lo previsto arriba):
+- **Placa de video sólo si es dedicada.** En la integrada de esta PC, Vulkan anda pero es peor: mediana 868 ms y 430–560 MB (usa la
+  memoria de la PC) contra 775 ms y 165 MB del procesador. `VozBackend` = `auto` (dedicada → Vulkan; si no, procesador), `cpu`
+  o `vulkan`. **Sin probar:** una PC con placa dedicada (no hay una acá); si Vulkan falla ahí, Astro relanza por procesador.
+- **Whisper reserva ~650 MB durante los ~0,3 s de cada frase y no los usa** (búferes para 30 s de audio): la memoria física
+  no pasa de ~200 MB, pero la privada marca picos de ~850 MB. Por eso el tope cuenta la física del traductor.
+- **El detector Silero hay que reiniciarlo al crearlo**: sin eso, una de cada dos reuniones arrancaba "sorda" (0 ventanas
+  con voz). Lo encontró la prueba repetida; ahora `voz.ps1` controla que el detector oiga voz.
+- **"Thank you" ya no se descarta** (el motor web lo filtraba como invento de Whisper): con detector de voz no hace falta, y
+  "gracias" se dice en serio.
+
+Pendiente / sin probar: reunión real con otra persona; PC con placa dedicada; PC **sin voz inglesa de Windows** (un Windows en
+español puede no traerla: hoy el traductor avisa y va la voz original; antes cubría Kokoro, que se fue con el motor web);
+instalación real de .NET desde el instalador (se probó detectar y bajar, no instalar); asistente del instalador con ventanas
+(se probó en silencio); borrar los datos al desinstalar. Después: calidad de la traducción (`voz.ps1 -Volcar` deja cada
+frase con su texto para afinar).
 
 **Regla de la fase (Gonzalo, 2026-11-25): el navegador funciona completo sin ningún LLM ni IA.** Las integraciones
 (API local, MCP, panel lateral, extensiones) son opcionales y se enchufan desde afuera: nada del navegador las necesita
@@ -137,7 +176,8 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 ## Ajustes (`%LOCALAPPDATA%\Navegador\settings.json`)
 `RamBudgetMb` (1024), `SuspendAfterSeconds` (60), `DiscardAfterMinutes` (15), `FocusLostSeconds` (10),
 `BlockingEnabled` (true), `SearchUrl` (Google), `AllowSites` (escudo), `BrowserArguments` (`--process-per-site`),
-`HttpsFirst` (true), `BlockNotifications` (true). Se abren desde el menú ⋮ → Ajustes y se releen al reiniciar.
+`HttpsFirst` (true), `BlockNotifications` (true), `VozEnabled` (true: traductor incorporado en el modo reunión),
+`VozBackend` (`auto`: placa de video dedicada si hay, si no el procesador; `cpu`; `vulkan`). Se abren desde el menú ⋮ → Ajustes y se releen al reiniciar.
 
 ## Riesgos conocidos
 - **RivaTuner Statistics Server (MSI Afterburner)** inyecta `RTSSHooks64.dll` y tira el proceso principal de WebView2

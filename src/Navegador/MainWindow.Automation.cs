@@ -14,7 +14,7 @@ namespace Navegador;
 ///   history · menu · tabmenu N · closemenus · private · main · toprivate (ir a la ventana privada abierta) · shot NOMBRE · close
 ///   js CÓDIGO (resultado al log) · cleardata (borra datos sin preguntar)
 ///   meeting on|off · meetingvoice auto|original|translated|both · translator tone|off · meetingstate (al log) · msgprobe
-///   apiapprove · apideny (contesta el pedido de permiso de una app) · forgetapps · waitapproval · waittranslator on|off
+///   apiapprove · apideny (contesta el pedido de permiso de una app) · forgetapps · waitapproval · waittranslator on|off [SEGUNDOS]
 ///   type TEXTO (escribe en el campo enfocado como una persona: eventos de entrada reales, vía CDP Input.insertText)
 /// Las capturas (interfaz + página + menú abierto, aunque la ventana esté tapada) van a &lt;datos&gt;\shots\NOMBRE.png.
 /// </summary>
@@ -129,22 +129,13 @@ public partial class MainWindow
             case "apideny": AnswerApproval(false); break;
             case "forgetapps": ForgetApps(); break;
             case "waitapproval": await WaitUntilAsync(() => _approval is not null, "waitapproval"); break;
-            case "vozprueba":
-            {
-                // vozprueba <archivo de audio>[|consulta del motor, p. ej. asr=…&mode=mt&ttsDevice=wasm]: prende el motor, espera los modelos (la primera vez
-                // los baja) y traduce el archivo entero; tiempos por frase al log (voz_test).
-                var parts = arg.Split('|');
-                var query = parts.Length > 1 ? "?" + parts[1] : null; // p. ej. asr=onnx-community/whisper-small&mode=mt
-                _ = _app.Voz.StartAsync(_env!, this, query);
-                await WaitUntilAsync(() => _app.Voz.Ready, "vozprueba: modelos", TimeSpan.FromMinutes(20));
-                var r = await _app.Voz.TestAsync(await File.ReadAllBytesAsync(parts[0]), TimeSpan.FromMinutes(10));
-                _app.Log.Event("voz_test", ("result", r.GetRawText()));
-                break;
-            }
             case "waittranslator":
-                // Espera a que una app (traductor) se conecte ("on") o se vaya ("off"): las pruebas con apps externas
-                // se sincronizan con lo que pasa, no con tiempos fijos.
-                await WaitUntilAsync(() => _app.Meetings.TranslatorConnected == (arg == "on"), "waittranslator " + arg);
+                // Espera a que un traductor (una app, o el incorporado) se conecte ("on") o se vaya ("off"): las
+                // pruebas se sincronizan con lo que pasa, no con tiempos fijos. "on N": hasta N segundos (la primera vez
+                // el traductor incorporado baja sus modelos).
+                var wait = arg.Split(' ');
+                await WaitUntilAsync(() => _app.Meetings.TranslatorConnected == (wait[0] == "on"), "waittranslator " + arg,
+                    wait.Length > 1 ? TimeSpan.FromSeconds(int.Parse(wait[1])) : null);
                 break;
             case "meetingstate": _active!.Core!.PostWebMessageAsJson("""{"t":"state"}"""); break;
             case "msgprobe":

@@ -42,8 +42,8 @@ public partial class App : Application
         }
         catch (TimeoutException)
         {
-            MessageBox.Show("Navegador ya está abierto pero no responde. Cerralo desde el Administrador de tareas y volvé a abrirlo.",
-                "Navegador", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Astro ya está abierto pero no responde. Cerralo desde el Administrador de tareas y volvé a abrirlo.",
+                "Astro", MessageBoxButton.OK, MessageBoxImage.Warning);
             Shutdown();
             return;
         }
@@ -88,6 +88,7 @@ public partial class App : Application
     {
         if (_services?.NormalWindowOpened == true) _services.SaveData();
         _services?.Api?.Dispose();
+        _services?.KillVoz();
         _services?.DeletePrivateProfilesOnExit();
         _services?.Log.Event("record_stop");
         _services?.Log.Dispose();

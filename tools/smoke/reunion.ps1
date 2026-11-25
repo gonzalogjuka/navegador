@@ -16,7 +16,8 @@ $Exe = (Resolve-Path $Exe).Path
 $page = ([Uri](Resolve-Path (Join-Path $PSScriptRoot 'reunion.html')).Path).AbsoluteUri
 $work = Join-Path $env:TEMP ("nav-reunion-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory $work | Out-Null
-$settings = @{ BrowserArguments = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required' }
+# VozEnabled = false: acá se prueba la plomería con el tono de prueba; el traductor incorporado tiene su prueba (voz.ps1).
+$settings = @{ BrowserArguments = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required'; VozEnabled = $false }
 $settings | ConvertTo-Json | Set-Content (Join-Path $work 'settings.json') -Encoding UTF8
 
 function Measure-Step([string]$name) {

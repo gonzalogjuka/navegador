@@ -16,6 +16,8 @@ public sealed record AppPaths(string Root)
     public string Integrations => Path.Combine(Root, "integrations.json");
     /// <summary>Dirección de la API mientras el navegador está abierto (para que las apps la encuentren).</summary>
     public string ApiInfo => Path.Combine(Root, "api.json");
+    /// <summary>Modelos de voz del traductor (se bajan la primera vez; no tienen nada personal).</summary>
+    public string VozModels => Path.Combine(Root, "modelos");
 
     /// <summary>
     /// Prefijo de los perfiles de WebView2 de las ventanas privadas. Sólo se usan en modo InPrivate, así que no heredan

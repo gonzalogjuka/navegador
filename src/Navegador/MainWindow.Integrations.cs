@@ -45,7 +45,7 @@ public partial class MainWindow
         if (_app.Api is not { } api) return;
         if (_app.AutomationScript is null && MessageBox.Show(this,
                 $"¿Olvidar las {api.GrantCount} apps conectadas? Se desconectan y la próxima vez vuelven a pedir permiso.",
-                "Navegador", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+                "Astro", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         api.RevokeAll();
     }
 }

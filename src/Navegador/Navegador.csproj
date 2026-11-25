@@ -7,8 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>0.4.2</Version>
-    <Product>Navegador</Product>
+    <Version>0.6.0</Version>
+    <!-- Nombre visible: Astro (lo que muestran Windows y el instalador). El ejecutable, los espacios de nombres y la
+         carpeta de datos siguen llamándose Navegador. -->
+    <Product>Astro</Product>
+    <AssemblyTitle>Astro</AssemblyTitle>
     <ApplicationIcon>navegador.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
@@ -20,22 +23,24 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="System.Speech" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="blocklist.txt" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Meeting/virtual-mic.js" LogicalName="virtual-mic.js" />
-    <!-- Motor de traducción (se genera con: cd voz && npm install && node build.mjs) -->
-    <None Include="Voz/**" CopyToOutputDirectory="PreserveNewest" />
     <Resource Include="navegador.ico" />
   </ItemGroup>
 
-  <!-- Si falta el motor de traducción (clon nuevo), se genera solo: npm install + node build.mjs en voz/. -->
-  <Target Name="BuildVoz" BeforeTargets="BeforeBuild" Condition="!Exists('Voz/engine.js')">
-    <Exec Command="npm install --no-audit --no-fund &amp;&amp; node build.mjs" WorkingDirectory="../../voz" />
-    <ItemGroup>
-      <None Include="Voz/**" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
+  <!-- El traductor de voz (src/Astro.Voz → astro-voz.exe) es un programa aparte que viaja en la subcarpeta voz\, con
+       sus propias bibliotecas. Se compila y se copia junto con Astro, al compilar y al publicar. -->
+  <ItemGroup>
+    <!-- Sólo para que se restaure y compile antes: Astro no usa su código, lo lanza como proceso. -->
+    <ProjectReference Include="..\Astro.Voz\Astro.Voz.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+  <Target Name="VozAlCompilar" AfterTargets="Build">
+    <MSBuild Projects="..\Astro.Voz\Astro.Voz.csproj" Targets="Publish" Properties="Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(OutDir)voz\" />
+  </Target>
+  <Target Name="VozAlPublicar" AfterTargets="Publish">
+    <MSBuild Projects="..\Astro.Voz\Astro.Voz.csproj" Targets="Publish" Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)voz\" />
   </Target>
 </Project>

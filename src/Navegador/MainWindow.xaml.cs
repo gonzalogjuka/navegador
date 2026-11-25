@@ -85,7 +85,7 @@ public partial class MainWindow : Window
         _app.Voz.Changed += OnMeetingsChanged;
     }
 
-    private string WindowSuffix => _isPrivate ? "Navegador (privada)" : "Navegador";
+    private string WindowSuffix => _isPrivate ? "Astro (privada)" : "Astro";
 
     public bool IsPrivate => _isPrivate;
 
@@ -113,7 +113,7 @@ public partial class MainWindow : Window
         catch (WebView2RuntimeNotFoundException)
         {
             MessageBox.Show(this, "Falta WebView2 Runtime. Instalalo desde https://go.microsoft.com/fwlink/p/?LinkId=2124703",
-                "Navegador", MessageBoxButton.OK, MessageBoxImage.Error);
+                "Astro", MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
             return;
         }
@@ -847,8 +847,14 @@ public partial class MainWindow : Window
             }
         }
         catch (System.Runtime.InteropServices.COMException) { }
+        // El traductor de voz es un proceso de Astro más: su memoria cuenta para el tope (fase 8.2), así en una reunión
+        // las pestañas de fondo se descartan antes y a la voz nunca le falta lugar. De él se cuenta la memoria física
+        // (working set) y no la privada: Whisper reserva ~650 MB durante los ~0,3 s que tarda cada frase y no los llega
+        // a usar (medido: la física no pasa de ~200 MB); contada, el tope descartaría pestañas por una reserva de un instante.
+        var vozPid = _app.Voz.ProcessId;
+        if (vozPid is { } voz) pids.Add(voz);
 
-        long priv = 0, rss = 0, rendererPriv = 0, gpuPriv = 0;
+        long priv = 0, rss = 0, rendererPriv = 0, gpuPriv = 0, vozPriv = 0, vozRss = 0;
         var alive = 0;
         var cpu = new Dictionary<int, TimeSpan>();
         TimeSpan cpuDelta = TimeSpan.Zero, rendererCpuDelta = TimeSpan.Zero;
@@ -857,7 +863,12 @@ public partial class MainWindow : Window
             try
             {
                 using var p = Process.GetProcessById(pid);
-                priv += p.PrivateMemorySize64;
+                if (pid == vozPid)
+                {
+                    vozPriv = p.PrivateMemorySize64;
+                    vozRss = p.WorkingSet64;
+                }
+                priv += pid == vozPid ? p.WorkingSet64 : p.PrivateMemorySize64;
                 rss += p.WorkingSet64;
                 if (renderers.Contains(pid)) rendererPriv += p.PrivateMemorySize64;
                 if (gpu.Contains(pid)) gpuPriv += p.PrivateMemorySize64;
@@ -899,6 +910,9 @@ public partial class MainWindow : Window
             ["app_private_mb"] = _lastPrivateMb,
             ["renderer_private_mb"] = Math.Round(rendererPriv / mb, 1),
             ["gpu_private_mb"] = Math.Round(gpuPriv / mb, 1),
+            // Del traductor: lo que cuenta para el tope (física) y, aparte, la privada con sus reservas momentáneas.
+            ["voz_mb"] = vozPid is null ? null : Math.Round(vozRss / mb, 1),
+            ["voz_private_mb"] = vozPid is null ? null : Math.Round(vozPriv / mb, 1),
             ["cpu_pct"] = cpuPct,
             ["renderer_cpu_pct"] = rendererCpuPct,
             ["tabs"] = _tabs.Count,

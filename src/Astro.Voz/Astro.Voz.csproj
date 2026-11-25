@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Traductor de voz de Astro (fase 8.1): programa aparte, nativo (whisper.cpp), que Astro lanza al empezar una
+       reunión y cierra al terminar. Astro funciona completo sin él: si falta o falla, la reunión lleva la voz original. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>astro-voz</AssemblyName>
+    <RootNamespace>Astro.Voz</RootNamespace>
+    <Version>0.6.0</Version>
+    <Product>Astro</Product>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Navegador.Core\Navegador.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Los paquetes de Whisper.net traen las bibliotecas nativas de todas las plataformas (Linux, x86, ARM): Astro
+       sólo lleva las de Windows de 64 bits (procesador y Vulkan). -->
+  <Target Name="SoloNativasWinX64" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <None Remove="@(None)" Condition="$([System.String]::Copy('%(None.TargetPath)').StartsWith('runtimes/')) and !$([System.String]::Copy('%(None.TargetPath)').Contains('win-x64'))" />
+    </ItemGroup>
+  </Target>
+
+</Project>

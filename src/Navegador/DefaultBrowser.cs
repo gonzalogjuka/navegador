@@ -9,7 +9,10 @@ namespace Navegador;
 /// </summary>
 public static class DefaultBrowser
 {
+    /// <summary>Identificador en el registro (no se ve): se conserva para que una instalación anterior se actualice sola.</summary>
     public const string AppName = "Navegador";
+    /// <summary>El nombre que muestra Windows.</summary>
+    public const string DisplayName = "Astro";
     private const string ClientKey = @"Software\Clients\StartMenuInternet\" + AppName;
     private const string UrlProgId = "NavegadorURL";
     private const string HtmlProgId = "NavegadorHTML";
@@ -21,7 +24,7 @@ public static class DefaultBrowser
     {
         var open = $"\"{exePath}\" \"%1\"";
         var icon = $"\"{exePath}\",0";
-        foreach (var (progId, description) in new[] { (UrlProgId, "Navegador URL"), (HtmlProgId, "Documento HTML (Navegador)") })
+        foreach (var (progId, description) in new[] { (UrlProgId, "Astro URL"), (HtmlProgId, "Documento HTML (Astro)") })
         {
             using var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + progId);
             k.SetValue("", description);
@@ -32,12 +35,12 @@ public static class DefaultBrowser
 
         using (var client = Registry.CurrentUser.CreateSubKey(ClientKey))
         {
-            client.SetValue("", AppName);
+            client.SetValue("", DisplayName);
             using (var i = client.CreateSubKey("DefaultIcon")) i.SetValue("", icon);
             using (var c = client.CreateSubKey(@"shell\open\command")) c.SetValue("", $"\"{exePath}\"");
             using var caps = client.CreateSubKey("Capabilities");
-            caps.SetValue("ApplicationName", AppName);
-            caps.SetValue("ApplicationDescription", "Navegador liviano: pestañas que se duermen, presupuesto de RAM y bloqueo de rastreo.");
+            caps.SetValue("ApplicationName", DisplayName);
+            caps.SetValue("ApplicationDescription", "Astro, navegador liviano: pestañas que se duermen, presupuesto de RAM y bloqueo de rastreo.");
             caps.SetValue("ApplicationIcon", icon);
             using (var s = caps.CreateSubKey("StartMenu")) s.SetValue("StartMenuInternet", AppName);
             using (var u = caps.CreateSubKey("URLAssociations"))

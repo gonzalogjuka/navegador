@@ -16,6 +16,5 @@ obj/
 # Salida de dotnet publish (el acceso directo apunta acá)
 dist/
 
-# Motor de traducción (voz/): dependencias y lo que genera build.mjs
-voz/node_modules/
-src/Navegador/Voz/
+# Instalador (tools/instalador): archivos armados y AstroSetup.exe
+tools/instalador/salida/

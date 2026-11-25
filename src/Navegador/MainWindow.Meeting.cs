@@ -55,7 +55,7 @@ public partial class MainWindow
         tab.InMeeting = true;
         tab.MeetingAuto = auto;
         _app.Meetings.Join(this, tab);
-        if (_env is not null) _ = _app.Voz.StartAsync(_env, this); // empieza a preparar la traducción ya
+        if (_settings.VozEnabled) _app.Voz.Start(); // empieza a preparar la traducción ya, antes de que hables
     }
 
     /// <summary>

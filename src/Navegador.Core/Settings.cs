@@ -31,6 +31,16 @@ public sealed class Settings
     public int ApiPort { get; set; } = 47800;
     /// <summary>Modo reunión automático en Meet, Teams web, Zoom web, Whereby y Jitsi (fase 7.2).</summary>
     public bool AutoMeeting { get; set; } = true;
+    /// <summary>
+    /// Traductor incorporado (español → inglés) en el modo reunión. Apagado, la reunión lleva tu voz original, salvo que
+    /// conectes una app de traducción por la API local.
+    /// </summary>
+    public bool VozEnabled { get; set; } = true;
+    /// <summary>
+    /// Con qué traduce el traductor incorporado: "auto" (placa de video dedicada si hay; si no, el procesador), "cpu" o
+    /// "vulkan" (fuerza la placa de video, también una integrada: más rápido pero ocupa 450–700 MB de RAM).
+    /// </summary>
+    public string VozBackend { get; set; } = "auto";
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
@@ -78,6 +88,7 @@ public sealed class Settings
         if (BudgetKeepRecentTabs < 0) BudgetKeepRecentTabs = d.BudgetKeepRecentTabs;
         if (string.IsNullOrWhiteSpace(SearchUrl)) SearchUrl = d.SearchUrl;
         if (ApiPort is < 1024 or > 65535) ApiPort = d.ApiPort;
+        if (VozBackend is not ("auto" or "cpu" or "vulkan")) VozBackend = d.VozBackend;
         BrowserArguments ??= "";
         AllowSites ??= [];
     }
