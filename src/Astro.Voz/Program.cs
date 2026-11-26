@@ -1,9 +1,9 @@
 using Astro.Voz;
 
 // astro-voz.exe: el traductor de voz de Astro (español → inglés), todo local.
-//   astro-voz.exe --pipe NOMBRE --models CARPETA [--parent PID] [--backend auto|cpu|vulkan] [--threads N]
+//   astro-voz.exe --pipe NOMBRE --models CARPETA [--parent PID] [--threads N]
 //       Lo lanza Astro al empezar una reunión: recibe tu voz por el named pipe y devuelve la voz en inglés.
-//   astro-voz.exe --file AUDIO.wav --models CARPETA [--out RESULTADO.json] [--backend …] [--threads N]
+//   astro-voz.exe --file AUDIO.wav --models CARPETA [--out RESULTADO.json] [--threads N]
 //       Prueba sin navegador: traduce un WAV entero y deja las frases y los tiempos en JSON.
 var options = Options.Parse(args);
 if (options is null) return 2;
@@ -20,13 +20,12 @@ catch (Exception ex)
 
 namespace Astro.Voz
 {
-    internal sealed record Options(string? Pipe, string? File, string? Out, string Models, int Parent, string Backend, int Threads)
+    internal sealed record Options(string? Pipe, string? File, string? Out, string Models, int Parent, int Threads)
     {
         public static Options? Parse(string[] args)
         {
             string? pipe = null, file = null, output = null, models = null;
             var parent = 0;
-            var backend = "auto";
             // La mitad de los hilos de la PC, entre 2 y 6: medido en un i5 de 12 hilos, 6 da ~250 ms por frase y más
             // hilos no mejoran (los núcleos de bajo consumo frenan al resto).
             var threads = Math.Clamp(Environment.ProcessorCount / 2, 2, 6);
@@ -40,13 +39,12 @@ namespace Astro.Voz
                     case "--out": output = value; break;
                     case "--models": models = value; break;
                     case "--parent": int.TryParse(value, out parent); break;
-                    case "--backend": backend = value.ToLowerInvariant(); break;
                     case "--threads": if (int.TryParse(value, out var t) && t is >= 1 and <= 32) threads = t; break;
                     default: return null;
                 }
             }
-            if (models is null || (pipe is null) == (file is null) || backend is not ("auto" or "cpu" or "vulkan")) return null;
-            return new Options(pipe, file, output, models, parent, backend, threads);
+            if (models is null || (pipe is null) == (file is null)) return null;
+            return new Options(pipe, file, output, models, parent, threads);
         }
     }
 }

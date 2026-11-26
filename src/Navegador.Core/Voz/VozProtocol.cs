@@ -42,7 +42,7 @@ public sealed record VozStatus(string Phase, string Detail, double Progress = 0)
 
 /// <param name="HighPriority">El proceso quedó con prioridad alta y sin ahorro de energía.</param>
 /// <param name="Mmcss">Los hilos de audio quedaron anotados en el planificador multimedia de Windows.</param>
-public sealed record VozReady(string Backend, string Asr, string? Voice, int Threads, int LoadMs, bool HighPriority = false, bool Mmcss = false);
+public sealed record VozReady(string Asr, string? Voice, int Threads, int LoadMs, bool HighPriority = false, bool Mmcss = false);
 
 /// <param name="Spoken">false: la frase no tenía nada para decir (ruido, silencio) y no se mandó voz.</param>
 /// <param name="TotalMs">De tu última palabra a que sale la voz traducida.</param>

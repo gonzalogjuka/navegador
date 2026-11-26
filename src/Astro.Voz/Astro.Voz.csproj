@@ -7,7 +7,6 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>astro-voz</AssemblyName>
     <RootNamespace>Astro.Voz</RootNamespace>
     <Version>0.6.0</Version>
@@ -23,7 +22,6 @@
   <ItemGroup>
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
-    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
   </ItemGroup>
 
@@ -32,7 +30,7 @@
   </ItemGroup>
 
   <!-- Los paquetes de Whisper.net traen las bibliotecas nativas de todas las plataformas (Linux, x86, ARM): Astro
-       sólo lleva las de Windows de 64 bits (procesador y Vulkan). -->
+       sólo lleva las de Windows de 64 bits (procesador, con y sin AVX). -->
   <Target Name="SoloNativasWinX64" BeforeTargets="AssignTargetPaths">
     <ItemGroup>
       <None Remove="@(None)" Condition="$([System.String]::Copy('%(None.TargetPath)').StartsWith('runtimes/')) and !$([System.String]::Copy('%(None.TargetPath)').Contains('win-x64'))" />

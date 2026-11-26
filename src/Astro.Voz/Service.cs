@@ -200,12 +200,12 @@ internal sealed class Service : IDisposable
             Send(VozProtocol.Message(VozFrame.Status, new VozStatus("downloading", label, progress))), _stop.Token);
         Send(VozProtocol.Message(VozFrame.Status, new VozStatus("loading", "reconocimiento de voz")));
         _detector = new SpeechDetector(ModelStore.PathOf(_options.Models, ModelStore.Vad));
-        _engine = Engine.Load(ModelStore.PathOf(_options.Models, ModelStore.Whisper), _options.Backend, _options.Threads);
+        _engine = Engine.Load(ModelStore.PathOf(_options.Models, ModelStore.Whisper), _options.Threads);
         Send(VozProtocol.Message(VozFrame.Status, new VozStatus("loading", "voz inglesa")));
         _voice = Voice.TryCreate() ?? throw new InvalidOperationException(
             "Windows no tiene una voz en inglés instalada (Configuración → Hora e idioma → Voz → Agregar voces)");
         _ready = true;
-        Send(VozProtocol.Message(VozFrame.Ready, new VozReady(_engine.Backend, ModelStore.Whisper.File, _voice.Name, _options.Threads,
+        Send(VozProtocol.Message(VozFrame.Ready, new VozReady(ModelStore.Whisper.File, _voice.Name, _options.Threads,
             (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds, _highPriority, mmcss)));
     }
 

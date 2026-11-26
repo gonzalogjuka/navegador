@@ -1,6 +1,6 @@
 ﻿# Prueba oculta del traductor de voz de Astro, de punta a punta (fase 8): una grabación en español hace de micrófono,
 # una página hace de reunión, Astro prende solo su traductor (voz\astro-voz.exe) y se mide lo que llega a la reunión.
-#   powershell -ExecutionPolicy Bypass -File tools/smoke/voz.ps1 [-Seconds 40] [-Url https://meet.jit.si/sala] [-Backend auto|cpu|vulkan]
+#   powershell -ExecutionPolicy Bypass -File tools/smoke/voz.ps1 [-Seconds 40] [-Url https://meet.jit.si/sala]
 #                                                               [-Carga] [-Limpio] [-Exe dist\Navegador.exe] [-Wav archivo.wav]
 # Corre con --automation (ventana fuera de pantalla, sin foco) y el micrófono falso de Chromium leyendo el WAV
 # (--use-file-for-fake-audio-capture), que se repite solo. No usa tu micrófono ni suena por los parlantes.
@@ -16,7 +16,6 @@ param(
     [string]$Wav = (Join-Path $PSScriptRoot 'muestras\es-atmolisis.wav'),
     [int]$Seconds = 40,
     [string]$Url = '',
-    [ValidateSet('auto', 'cpu', 'vulkan')][string]$Backend = 'auto',
     [switch]$Carga,
     [switch]$Limpio,
     [switch]$Volcar,             # deja cada frase (WAV + texto en inglés) en %TEMP%\astro-voz-prueba\frases, para afinar
@@ -36,7 +35,7 @@ if ($Limpio) { Remove-Item (Join-Path $data 'modelos') -Recurse -Force -ErrorAct
 
 $browserArgs = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required ' +
     "--use-file-for-fake-audio-capture=$($Wav -replace '\\', '/')"
-@{ ApiEnabled = $false; VozBackend = $Backend; BrowserArguments = $browserArgs } | ConvertTo-Json |
+@{ ApiEnabled = $false; BrowserArguments = $browserArgs } | ConvertTo-Json |
     Set-Content (Join-Path $data 'settings.json') -Encoding UTF8
 
 $page = ([Uri](Resolve-Path (Join-Path $PSScriptRoot 'reunion.html')).Path).AbsoluteUri
@@ -130,7 +129,7 @@ foreach ($k in $checks.Keys) {
 ''
 "corrida        {0:0} s · reunión {1} · {2} s traduciendo{3}" -f $took, $(if ($Url) { $Url } else { 'tools/smoke/reunion.html' }), $Seconds, $(if ($Carga) { ' · con pestañas pesadas' } else { '' })
 if ($ready) {
-    "traductor      $($ready.backend), $($ready.threads) hilos, $($ready.asr), voz «$($ready.voice)», listo en $($ready.load_ms) ms" +
+    "traductor      procesador, $($ready.threads) hilos, $($ready.asr), voz «$($ready.voice)», listo en $($ready.load_ms) ms" +
         " · prioridad alta: $(if ($ready.high_priority) { 'sí' } else { 'no' }) · MMCSS: $(if ($ready.mmcss) { 'sí' } else { 'no' })"
 }
 "frases         detectadas $($phrases.Count) · dichas $($spoken.Count) · sin nada que decir $($phrases.Count - $spoken.Count) · juntadas por atraso $($merged.Count)"

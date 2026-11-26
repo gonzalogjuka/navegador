@@ -1,5 +1,10 @@
 # Changelog
 
+## Sin publicar — el traductor usa sólo el procesador
+**El traductor de las reuniones ya no usa la placa de video, ni dedicada ni integrada: traduce con el procesador en toda PC**, para que la experiencia sea la misma en cualquier máquina. Con una placa dedicada, Vulkan tardaba 15 s en arrancar la primera vez y las primeras frases 9 s (ver la prueba del 25/11 más abajo).
+- Se sacó la biblioteca de Vulkan (58 MB), la detección de placa (`GpuProbe`), el ajuste `VozBackend` y la opción `--backend` de `astro-voz.exe` y `-Backend` de `voz.ps1`. Un `settings.json` viejo con `VozBackend` se lee igual (se ignora).
+- **Instalador 3,4 MB** (antes 8,1), instalado 10 MB (antes 67). `probar.ps1` en la PC con RTX 2060 SUPER: 13 de 13; traducción mediana 841 ms, peor 886 ms, traductor 143–146 MB.
+
 ## Sin publicar — fase 8: traductor nativo, prioridad a la voz e instalador
 **El traductor dejó de ser JavaScript en una página oculta: es un programa aparte, `astro-voz.exe`.** Misma prueba de punta a punta que la fase 7 (grabación en español como micrófono, página de prueba y `meet.jit.si`), ahora en el repo (`tools/smoke/voz.ps1`), en la misma notebook (i5-1235U, Iris Xe), con la fase 7 vuelta a medir el mismo día:
 - **Demora** de tu última palabra a la voz inglesa: **mediana 750–775 ms, peor 846–954 ms** (antes 1374 / 1529). En Jitsi real: 763 / 941.

@@ -23,35 +23,22 @@ internal sealed class Engine : IDisposable
     private readonly int _threads;
     private readonly StringBuilder _text = new();
 
-    /// <summary>"cpu" o "vulkan".</summary>
-    public string Backend { get; }
-
-    private Engine(WhisperFactory factory, string backend, int threads)
+    private Engine(WhisperFactory factory, int threads)
     {
         _factory = factory;
-        Backend = backend;
         _threads = threads;
     }
 
-    /// <param name="prefer">
-    /// "auto": placa de video dedicada si hay (Vulkan), si no el procesador. En una integrada Vulkan gana ~100 ms por
-    /// frase pero ocupa 450–700 MB de la memoria de la PC (la comparte con el sistema) contra ~180 MB del procesador.
-    /// "cpu" y "vulkan" lo fuerzan.
-    /// </param>
-    public static Engine Load(string modelPath, string prefer, int threads)
+    /// <summary>
+    /// Sólo el procesador, nunca la placa de video: Astro no lleva la biblioteca de GPU de Whisper. Con una dedicada
+    /// (RTX 2060 SUPER) Vulkan tardaba 15 s en arrancar la primera vez y las primeras frases 9 s; en una integrada ocupa
+    /// 450–700 MB de la memoria de la PC. El procesador da ~770 ms por frase con ~165 MB, parejo en toda PC.
+    /// </summary>
+    public static Engine Load(string modelPath, int threads)
     {
-        var gpu = prefer switch
-        {
-            "cpu" => -1,
-            "vulkan" => Math.Max(0, GpuProbe.DiscreteGpuIndex()),
-            _ => GpuProbe.DiscreteGpuIndex(),
-        };
-        RuntimeOptions.RuntimeLibraryOrder = gpu >= 0
-            ? [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx]
-            : [RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
-        var factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = gpu >= 0, GpuDevice = Math.Max(0, gpu) });
-        var vulkan = gpu >= 0 && RuntimeOptions.LoadedLibrary == RuntimeLibrary.Vulkan;
-        var engine = new Engine(factory, vulkan ? "vulkan" : "cpu", threads);
+        RuntimeOptions.RuntimeLibraryOrder = [RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
+        var factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = false });
+        var engine = new Engine(factory, threads);
         engine.Translate(new float[Rate * 2]); // precalentar: la primera pasada reserva memoria y tarda más
         return engine;
     }

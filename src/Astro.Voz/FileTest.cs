@@ -13,7 +13,7 @@ internal static class FileTest
 {
     private sealed record PhraseResult(int AudioMs, string Reason, string En, int AsrMs, int TtsMs, int TtsAudioMs);
 
-    private sealed record Result(string Backend, int Threads, string? Voice, int LoadMs, int DurationMs, IReadOnlyList<PhraseResult> Phrases,
+    private sealed record Result(int Threads, string? Voice, int LoadMs, int DurationMs, IReadOnlyList<PhraseResult> Phrases,
         int AsrMedianMs, int AsrMaxMs, int PrivateMb, int WorkingSetMb, int PeakWorkingSetMb);
 
     public static int Run(Options options)
@@ -21,7 +21,7 @@ internal static class FileTest
         var started = Stopwatch.GetTimestamp();
         ModelStore.Ensure(options.Models, (_, _) => { }, CancellationToken.None);
         using var detector = new SpeechDetector(ModelStore.PathOf(options.Models, ModelStore.Vad));
-        using var engine = Engine.Load(ModelStore.PathOf(options.Models, ModelStore.Whisper), options.Backend, options.Threads);
+        using var engine = Engine.Load(ModelStore.PathOf(options.Models, ModelStore.Whisper), options.Threads);
         using var voice = Voice.TryCreate();
         var loadMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
@@ -52,7 +52,7 @@ internal static class FileTest
         var asr = results.Select(r => r.AsrMs).Order().ToList();
         using var me = Process.GetCurrentProcess();
         const int mb = 1024 * 1024;
-        var result = new Result(engine.Backend, options.Threads, voice?.Name, loadMs, pcm.Length / 2 * 1000 / Engine.Rate, results,
+        var result = new Result(options.Threads, voice?.Name, loadMs, pcm.Length / 2 * 1000 / Engine.Rate, results,
             asr.Count > 0 ? asr[asr.Count / 2] : 0, asr.Count > 0 ? asr[^1] : 0,
             (int)(me.PrivateMemorySize64 / mb), (int)(me.WorkingSet64 / mb), (int)(me.PeakWorkingSet64 / mb));
         var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });

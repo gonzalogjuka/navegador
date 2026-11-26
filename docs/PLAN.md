@@ -115,18 +115,19 @@ día con el mismo método antes de borrar el motor web.
 | RAM total de Astro en la reunión | 2700–2900 MB | **470–500 MB** |
 | Listo para traducir (modelos ya bajados) | ~3,6 s | **~0,9–1,1 s** |
 | Descarga de la primera vez | ~150 MB | **58 MB** (Whisper base q5_1 + Silero), con SHA-256 verificado |
-| Motor que viaja con Astro | 23 MB de JavaScript/WASM | 63 MB instalado (58 son la biblioteca de Vulkan); instalador 8,1 MB |
+| Motor que viaja con Astro | 23 MB de JavaScript/WASM | 10 MB instalado (sólo procesador); instalador 3,4 MB |
 
 | # | Estado | Detalle |
 |---|---|---|
-| 8.1 | **Hecho** | `src/Astro.Voz` → `voz\astro-voz.exe`. Named pipe binario sólo para el usuario (`Navegador.Core/Voz/VozProtocol`), Silero por ventanas de 32 ms con estado por pestaña, Whisper base q5_1 con el contexto de audio recortado al largo de la frase (la clave de la velocidad: 250 ms contra 1,5 s con los 30 s enteros), tope de largo y filtro de bucles, voz de Windows adentro. Si se cae en una reunión, Astro lo relanza (hasta 3 veces, ya sin placa de video); si Astro desaparece, se cierra solo. Motor JS borrado (`voz/`, `VozEngine`, `HostVoice`). Prueba sin navegador: `astro-voz.exe --file audio.wav --models carpeta --out resultado.json`. |
+| 8.1 | **Hecho** | `src/Astro.Voz` → `voz\astro-voz.exe`. Named pipe binario sólo para el usuario (`Navegador.Core/Voz/VozProtocol`), Silero por ventanas de 32 ms con estado por pestaña, Whisper base q5_1 con el contexto de audio recortado al largo de la frase (la clave de la velocidad: 250 ms contra 1,5 s con los 30 s enteros), tope de largo y filtro de bucles, voz de Windows adentro. Si se cae en una reunión, Astro lo relanza (hasta 3 veces); si Astro desaparece, se cierra solo. Motor JS borrado (`voz/`, `VozEngine`, `HostVoice`). Prueba sin navegador: `astro-voz.exe --file audio.wav --models carpeta --out resultado.json`. |
 | 8.2 | **Hecho** | Proceso con prioridad alta y sin ahorro de energía; los dos hilos de audio en MMCSS ("Pro Audio"). El tope de RAM cuenta al traductor (memoria física). Con 6 pestañas pesadas abriéndose durante la reunión (Maps, YouTube, La Nación, Infobae, Mercado Libre, Wikipedia; `voz.ps1 -Carga`): **mediana 765 ms, peor 1015 ms, 11 de 11 frases**, 5 pestañas de fondo descartadas por el tope, la de la reunión intacta; el log trae la RAM de cada parte cada 5 s. Sin la prioridad la mediana ya era la misma (767 ms): en esta PC lo que mantiene la demora es que el traductor es liviano; la prioridad queda como seguro para PCs más cargadas. |
-| 8.3 | **Hecho** | `tools/instalador/armar.ps1` → `AstroSetup.exe`, **8,1 MB**. Por usuario, sin administrador, `%LOCALAPPDATA%\Programs\Astro`, accesos directos "Astro", desinstalar desde Configuración, registro como navegador. Si falta .NET 8 Desktop Runtime lo baja de Microsoft y lo instala (ese paso sí pide permiso de administrador: es de Windows). `tools/instalador/probar.ps1`: instala en una carpeta de prueba, corre `voz.ps1` con la copia instalada y desinstala: 15 de 15, sin restos. Nombre visible "Astro" (ventana, mensajes, Windows); el ejecutable y la carpeta de datos siguen siendo `Navegador`. |
+| 8.3 | **Hecho** | `tools/instalador/armar.ps1` → `AstroSetup.exe`, **3,4 MB** (8,1 MB mientras llevaba Vulkan). Por usuario, sin administrador, `%LOCALAPPDATA%\Programs\Astro`, accesos directos "Astro", desinstalar desde Configuración, registro como navegador. Si falta .NET 8 Desktop Runtime lo baja de Microsoft y lo instala (ese paso sí pide permiso de administrador: es de Windows). `tools/instalador/probar.ps1`: instala en una carpeta de prueba, corre `voz.ps1` con la copia instalada y desinstala: 15 de 15, sin restos. Nombre visible "Astro" (ventana, mensajes, Windows); el ejecutable y la carpeta de datos siguen siendo `Navegador`. |
 
 Decisiones tomadas midiendo (cambian lo previsto arriba):
-- **Placa de video sólo si es dedicada.** En la integrada de esta PC, Vulkan anda pero es peor: mediana 868 ms y 430–560 MB (usa la
-  memoria de la PC) contra 775 ms y 165 MB del procesador. `VozBackend` = `auto` (dedicada → Vulkan; si no, procesador), `cpu`
-  o `vulkan`. **Sin probar:** una PC con placa dedicada (no hay una acá); si Vulkan falla ahí, Astro relanza por procesador.
+- **Sólo el procesador, nunca la placa de video** (decisión de Gonzalo, 25/11: la experiencia tiene que ser la misma en toda PC).
+  En la integrada de esta notebook Vulkan era peor: 868 ms y 430–560 MB (usa la memoria de la PC) contra 775 ms y 165 MB.
+  En una dedicada (RTX 2060 SUPER) la primera vez tardó 15 s en arrancar y las primeras frases 9 s. Astro ya no lleva la
+  biblioteca de Vulkan (58 MB) ni el ajuste `VozBackend`.
 - **Whisper reserva ~650 MB durante los ~0,3 s de cada frase y no los usa** (búferes para 30 s de audio): la memoria física
   no pasa de ~200 MB, pero la privada marca picos de ~850 MB. Por eso el tope cuenta la física del traductor.
 - **El detector Silero hay que reiniciarlo al crearlo**: sin eso, una de cada dos reuniones arrancaba "sorda" (0 ventanas
@@ -134,7 +135,7 @@ Decisiones tomadas midiendo (cambian lo previsto arriba):
 - **"Thank you" ya no se descarta** (el motor web lo filtraba como invento de Whisper): con detector de voz no hace falta, y
   "gracias" se dice en serio.
 
-Pendiente / sin probar: reunión real con otra persona; PC con placa dedicada; PC **sin voz inglesa de Windows** (un Windows en
+Pendiente / sin probar: reunión real con otra persona; PC **sin voz inglesa de Windows** (un Windows en
 español puede no traerla: hoy el traductor avisa y va la voz original; antes cubría Kokoro, que se fue con el motor web);
 instalación real de .NET desde el instalador (se probó detectar y bajar, no instalar); asistente del instalador con ventanas
 (se probó en silencio); borrar los datos al desinstalar. Después: calidad de la traducción (`voz.ps1 -Volcar` deja cada
@@ -176,8 +177,8 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 ## Ajustes (`%LOCALAPPDATA%\Navegador\settings.json`)
 `RamBudgetMb` (1024), `SuspendAfterSeconds` (60), `DiscardAfterMinutes` (15), `FocusLostSeconds` (10),
 `BlockingEnabled` (true), `SearchUrl` (Google), `AllowSites` (escudo), `BrowserArguments` (`--process-per-site`),
-`HttpsFirst` (true), `BlockNotifications` (true), `VozEnabled` (true: traductor incorporado en el modo reunión),
-`VozBackend` (`auto`: placa de video dedicada si hay, si no el procesador; `cpu`; `vulkan`). Se abren desde el menú ⋮ → Ajustes y se releen al reiniciar.
+`HttpsFirst` (true), `BlockNotifications` (true), `VozEnabled` (true: traductor incorporado en el modo reunión). Se abren
+desde el menú ⋮ → Ajustes y se releen al reiniciar.
 
 ## Riesgos conocidos
 - **RivaTuner Statistics Server (MSI Afterburner)** inyecta `RTSSHooks64.dll` y tira el proceso principal de WebView2

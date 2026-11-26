@@ -15,7 +15,7 @@ namespace Navegador.Meeting;
 /// antes de que hables) y lo cierra un rato después de que termina la última: fuera de las reuniones no hay proceso ni
 /// memoria. Hablan por un named pipe en binario (<see cref="VozProtocol"/>), sólo para este usuario.
 /// Si el traductor falta, falla o se cae, la reunión lleva la voz original; si se cae en medio de una reunión se vuelve a
-/// lanzar solo (la segunda vez, sin placa de video).
+/// lanzar solo. Traduce sólo con el procesador: nunca usa la placa de video.
 /// </summary>
 public sealed class VozTranslator(AppServices app) : IMeetingTranslator
 {
@@ -25,11 +25,10 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
     /// <summary>Voz en cola hacia el traductor: ~10 s. Si no la lee, se descarta la más vieja.</summary>
     private const int MaxQueuedFrames = 512;
 
-    private sealed class Session(Process process, NamedPipeServerStream pipe, string backend)
+    private sealed class Session(Process process, NamedPipeServerStream pipe)
     {
         public Process Process { get; } = process;
         public NamedPipeServerStream Pipe { get; } = pipe;
-        public string Backend { get; } = backend;
         public CancellationTokenSource Cancel { get; } = new();
         public Channel<byte[]> Outgoing { get; } = Channel.CreateBounded<byte[]>(
             new BoundedChannelOptions(MaxQueuedFrames) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -46,8 +45,6 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
     public bool Ready { get; private set; }
     /// <summary>Lo que está haciendo, para la barra de estado: null si está listo o apagado.</summary>
     public string? Status { get; private set; }
-    /// <summary>"cpu" o "vulkan", cuando está listo.</summary>
-    public string? Backend { get; private set; }
     public event Action? Changed;
 
     public static string ExePath => Path.Combine(AppContext.BaseDirectory, "voz", "astro-voz.exe");
@@ -62,10 +59,10 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         CancelStop();
         if (_session is not null) return;
         _restarts = 0;
-        Launch(app.Settings.VozBackend);
+        Launch();
     }
 
-    private void Launch(string backend)
+    private void Launch()
     {
         if (!Available)
         {
@@ -81,7 +78,6 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         foreach (var arg in new[]
                  {
                      "--pipe", pipeName, "--models", app.Paths.VozModels, "--parent", Environment.ProcessId.ToString(),
-                     "--backend", backend,
                  })
             start.ArgumentList.Add(arg);
         Process process;
@@ -96,10 +92,10 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
             app.Log.Event("voz_error", ("message", "no arrancó astro-voz.exe: " + ex.Message));
             return;
         }
-        var session = new Session(process, pipe, backend);
+        var session = new Session(process, pipe);
         _session = session;
         ProcessId = process.Id;
-        app.Log.Event("voz_start", ("pid", process.Id), ("backend", backend), ("restart", _restarts));
+        app.Log.Event("voz_start", ("pid", process.Id), ("restart", _restarts));
         _ = Task.Run(() => PumpAsync(session));
     }
 
@@ -137,7 +133,7 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         session.Cancel.Cancel();
         session.Pipe.Dispose();
         session.Process.Dispose();
-        app.Log.Event("voz_exit", ("exit_code", exitCode), ("stopping", session.Stopping), ("backend", session.Backend));
+        app.Log.Event("voz_exit", ("exit_code", exitCode), ("stopping", session.Stopping));
         OnUi(() => OnEnded(session));
     }
 
@@ -175,8 +171,7 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
                 {
                     if (_session != session) return;
                     Ready = true;
-                    Backend = ready.Backend;
-                    app.Log.Event("voz_ready", ("backend", ready.Backend), ("load_ms", ready.LoadMs), ("asr", ready.Asr),
+                    app.Log.Event("voz_ready", ("load_ms", ready.LoadMs), ("asr", ready.Asr),
                         ("voice", ready.Voice), ("threads", ready.Threads), ("pid", session.Process.Id),
                         ("high_priority", ready.HighPriority), ("mmcss", ready.Mmcss));
                     SetStatus(null);
@@ -209,7 +204,6 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         _session = null;
         ProcessId = null;
         Ready = false;
-        Backend = null;
         app.Meetings.Disconnect(this);
 
         if (session.FatalError is { } fatal)
@@ -218,9 +212,9 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         }
         else if (app.Meetings.SessionCount > 0 && _restarts < MaxRestarts)
         {
-            // Se cayó en medio de una reunión: vuelve solo. Si iba por la placa de video, ahora por el procesador.
+            // Se cayó en medio de una reunión: vuelve solo.
             _restarts++;
-            Launch("cpu");
+            Launch();
         }
         else
         {
@@ -257,7 +251,6 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         session.Outgoing.Writer.TryWrite(VozProtocol.Frame(VozFrame.Bye));
         session.Outgoing.Writer.TryComplete();
         Ready = false;
-        Backend = null;
         _liveTabs = [];
         app.Meetings.Disconnect(this);
         SetStatus(null);
