@@ -1,6 +1,7 @@
 # Changelog
 
-## Sin publicar — permisos del sitio y sin parpadeo al despertar pestañas
+## 0.6.1 — 2026-11-26: permisos del sitio y sin parpadeo al despertar pestañas
+Instalada en la PC con `AstroSetup.exe` (incluye también "el traductor usa sólo el procesador", más abajo).
 - **Permisos del sitio en el candado.** Clic en el candado: micrófono, cámara y ubicación (y todo lo que el sitio tenga guardado) con Preguntar / Permitir / Bloquear, y "Restablecer los permisos de este sitio"; al cambiar, la página se recarga. Si el sitio tiene bloqueado el micrófono o la cámara, el candado pasa a un micrófono tachado naranja. Origen: WebView2 recuerda "Bloquear" para siempre y no había cómo deshacerlo; el 26/11 Meet tenía micrófono y cámara bloqueados en el perfil y su botón "Usar el micrófono" no hacía nada. Log: `site_permission`. Órdenes de `--automation`: `perm KIND STATE`, `lockstate`, `lockmenu`.
 - **Sin parpadeo al despertar una pestaña o al reabrir el navegador.** El WebView nacía oculto, sin tamaño, y Chromium armaba la página con uno por defecto (961×1032 en vez de 1264×678): al mostrarla parpadeaba y se reacomodaba. Ahora nace visible fuera de la ventana, recibe el tamaño real y recién después se oculta; la página carga con su tamaño final (medido: `load 1264x678`, sin `resize`). Vale también para las pestañas nuevas.
 
