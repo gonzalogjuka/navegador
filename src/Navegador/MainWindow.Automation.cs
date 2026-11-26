@@ -16,6 +16,7 @@ namespace Navegador;
 ///   meeting on|off · meetingvoice auto|original|translated|both · translator tone|off · meetingstate (al log) · msgprobe
 ///   apiapprove · apideny (contesta el pedido de permiso de una app) · forgetapps · waitapproval · waittranslator on|off [SEGUNDOS]
 ///   type TEXTO (escribe en el campo enfocado como una persona: eventos de entrada reales, vía CDP Input.insertText)
+///   perm KIND STATE (permiso del sitio, como el menú del candado: perm Microphone Deny) · lockstate (candado al log) · lockmenu
 /// Las capturas (interfaz + página + menú abierto, aunque la ventana esté tapada) van a &lt;datos&gt;\shots\NOMBRE.png.
 /// </summary>
 public partial class MainWindow
@@ -145,6 +146,16 @@ public partial class MainWindow
                 probed.Core!.WebMessageReceived += (_, e) =>
                     _app.Log.Event("probe_message", ("tab_id", probed.Id), ("message", e.WebMessageAsJson));
                 break;
+            case "perm":
+                // perm Microphone|Camera|… Allow|Deny|Default: lo mismo que elegirlo en el menú del candado.
+                var p = arg.Split(' ');
+                await SetSitePermissionAsync(_active!, OriginOf(_active!.Url)!, Enum.Parse<Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind>(p[0]),
+                    Enum.Parse<Microsoft.Web.WebView2.Core.CoreWebView2PermissionState>(p[1]), reload: false);
+                break;
+            case "lockstate": // candado al log: ícono y aviso de permisos
+                _app.Log.Event("automation_lock", ("glyph", ((int)LockIcon.Text.FirstOrDefault()).ToString("X")), ("tooltip", LockIcon.ToolTip?.ToString()));
+                break;
+            case "lockmenu": Lock_Click(LockIcon, null!); await Task.Delay(500); break;
             case "shot": await ShotAsync(arg); break;
             case "close": Close(); break;
             default: throw new ArgumentException($"orden desconocida: {cmd}");

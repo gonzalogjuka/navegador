@@ -178,7 +178,8 @@
                     <Button x:Name="StarButton" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE734;"
                             Width="28" Height="28" ToolTip="Agregar a favoritos (Ctrl+D)" Click="Star_Click"/>
                     <TextBlock x:Name="LockIcon" DockPanel.Dock="Left" FontFamily="{StaticResource Icons}" FontSize="12"
-                               VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#9AA0A6"/>
+                               VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#9AA0A6" Cursor="Hand"
+                               Background="Transparent" MouseLeftButtonUp="Lock_Click"/>
                     <TextBox x:Name="Address" Background="Transparent" Foreground="#E8EAED" BorderThickness="0" CaretBrush="#E8EAED"
                              VerticalContentAlignment="Center" Height="30" FontSize="14"
                              KeyDown="Address_KeyDown" GotKeyboardFocus="Address_GotFocus" PreviewMouseLeftButtonDown="Address_PreviewMouseDown"/>

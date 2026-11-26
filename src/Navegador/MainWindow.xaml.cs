@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     private const int SampleEveryTicks = 5;   // tick = 1 s
     private const int SaveEveryTicks = 30;
     private static readonly double[] ZoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0];
+    /// <summary>Corrida fuera de la ventana con el mismo ancho: visible para Chromium (recibe tamaño) pero no se ve.</summary>
+    private static readonly Thickness Offscreen = new(-20000, 0, 20000, 0);
 
     private readonly AppServices _app;
     private readonly Settings _settings;
@@ -270,7 +272,10 @@ public partial class MainWindow : Window
     {
         if (tab.WebView is not null || _env is null) return;
         var span = _log.StartSpan("webview_create", ("tab_id", tab.Id));
-        var wv = new WebView2 { Visibility = Visibility.Collapsed };
+        // Nace visible pero corrida fuera de la ventana, para que Chromium reciba el tamaño real antes de cargar nada: si
+        // nacía oculta, la página se armaba con un tamaño por defecto (961x1032 contra 1264x678 reales) y al mostrarla
+        // parpadeaba y se reacomodaba. Una oculta (Collapsed o Hidden) no recibe tamaño.
+        var wv = new WebView2 { Margin = Offscreen };
         tab.WebView = wv;
         Host.Children.Add(wv);
         if (_isPrivate)
@@ -317,6 +322,9 @@ public partial class MainWindow : Window
                     CoreWebView2WebResourceRequestSourceKinds.All);
             core.WebResourceRequested += (_, e) => OnResourceRequested(tab, e);
         }
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded); // ya ubicada: Chromium tiene el tamaño
+        wv.Visibility = Visibility.Collapsed; // oculta conserva el tamaño que ya recibió
+        wv.Margin = default;
         span.End();
     }
 
@@ -433,7 +441,7 @@ public partial class MainWindow : Window
             _app.Data.AddVisit(tab.Url, tab.Title, DateTime.UtcNow);
         _log.Event("navigation_completed", ("tab_id", tab.Id), ("ok", e.IsSuccess), ("host", BrowserTab.HostOf(tab.Url)),
             ("blocked", tab.BlockedOnPage), ("error", e.IsSuccess ? null : e.WebErrorStatus.ToString()));
-        if (tab == _active) RefreshChrome();
+        if (tab == _active) { RefreshChrome(); _ = RefreshPermissionHintAsync(); }
     }
 
 
@@ -564,6 +572,7 @@ public partial class MainWindow : Window
         RefreshChrome();
         RefreshZoom();
         BringIntoView(tab);
+        _ = RefreshPermissionHintAsync();
     }
 
     private static async Task SaveScrollAsync(BrowserTab tab, CoreWebView2 core)
@@ -954,6 +963,7 @@ public partial class MainWindow : Window
             LockIcon.Text = "";
             LockIcon.ToolTip = null;
         }
+        ApplyPermissionHint(url);
 
         // La ventana privada no ve ni toca los favoritos.
         StarButton.Visibility = _isPrivate ? Visibility.Collapsed : Visibility.Visible;
