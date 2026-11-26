@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.2 — 2026-11-26: el menú de permisos se lee
+- El menú del candado ya no usa submenús: el submenú de WPF se dibujaba claro y con el texto claro del tema no se leía nada. Ahora cada permiso es un título con sus tres opciones debajo, y la elegida va en negrita, en celeste y con ✓.
+
 ## 0.6.1 — 2026-11-26: permisos del sitio y sin parpadeo al despertar pestañas
 Instalada en la PC con `AstroSetup.exe` (incluye también "el traductor usa sólo el procesador", más abajo).
 - **Permisos del sitio en el candado.** Clic en el candado: micrófono, cámara y ubicación (y todo lo que el sitio tenga guardado) con Preguntar / Permitir / Bloquear, y "Restablecer los permisos de este sitio"; al cambiar, la página se recarga. Si el sitio tiene bloqueado el micrófono o la cámara, el candado pasa a un micrófono tachado naranja. Origen: WebView2 recuerda "Bloquear" para siempre y no había cómo deshacerlo; el 26/11 Meet tenía micrófono y cámara bloqueados en el perfil y su botón "Usar el micrófono" no hacía nada. Log: `site_permission`. Órdenes de `--automation`: `perm KIND STATE`, `lockstate`, `lockmenu`.

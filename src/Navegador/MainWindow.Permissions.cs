@@ -106,17 +106,23 @@ public partial class MainWindow
         foreach (var kind in perms.Keys)
             if (kinds.All(k => k.Kind != kind))
                 kinds.Add((kind, OtherPermissionLabels.TryGetValue(kind, out var label) ? label : kind.ToString()));
+        // Sin submenús: el submenú de WPF se dibuja claro y con el texto claro del tema no se leía nada (26/11).
         foreach (var (kind, label) in kinds)
         {
             var current = perms.TryGetValue(kind, out var s) ? s : CoreWebView2PermissionState.Default;
-            var item = new MenuItem { Header = $"{label}: {StateLabel(current)}" };
+            menu.Items.Add(new MenuItem { Header = label, FontWeight = FontWeights.SemiBold, IsHitTestVisible = false, Focusable = false });
             foreach (var state in new[] { CoreWebView2PermissionState.Default, CoreWebView2PermissionState.Allow, CoreWebView2PermissionState.Deny })
             {
-                var option = new MenuItem { Header = StateLabel(state), IsCheckable = true, IsChecked = state == current };
-                option.Click += async (_, _) => await SetSitePermissionAsync(tab, origin, kind, state);
-                item.Items.Add(option);
+                var chosen = state == current;
+                var option = new MenuItem { Header = (chosen ? "✓  " : "     ") + StateLabel(state) };
+                if (chosen)
+                {
+                    option.FontWeight = FontWeights.Bold;
+                    option.Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0xB4, 0xF8));
+                }
+                else option.Click += async (_, _) => await SetSitePermissionAsync(tab, origin, kind, state);
+                menu.Items.Add(option);
             }
-            menu.Items.Add(item);
         }
         if (perms.Count > 0)
         {
