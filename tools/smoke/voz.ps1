@@ -7,7 +7,7 @@
 #   sin -Url   la reunión es tools/smoke/reunion.html, con el modo reunión prendido a mano.
 #   -Url       una reunión real (p. ej. https://meet.jit.si/una-sala): el modo reunión se tiene que prender solo.
 #   -Carga     fase 8.2: durante la reunión abre pestañas pesadas (Maps, YouTube, diarios); la demora no tiene que subir.
-#   -Limpio    borra los modelos antes: prueba la descarga de la primera vez (58 MB).
+#   -Limpio    borra los modelos antes: prueba la descarga de la primera vez (182 MB).
 # Qué mide (todo sale del log de Astro): frases detectadas y dichas, demora de tu última palabra a la voz inglesa,
 # lo que tarda el reconocimiento, y la RAM del traductor y del resto de Astro durante la reunión.
 # Los datos quedan en %TEMP%\astro-voz-prueba (los modelos se bajan una sola vez). Sale con 1 si algo falla.
@@ -19,8 +19,8 @@ param(
     [switch]$Carga,
     [switch]$Limpio,
     [switch]$Volcar,             # deja cada frase (WAV + texto en inglés) en %TEMP%\astro-voz-prueba\frases, para afinar
-    [int]$MaxMedianaMs = 1300,   # la fase 7 (motor web): 1,3 s
-    [int]$MaxVozMb = 400,        # meta de la fase 8: 200–400 MB
+    [int]$MaxMedianaMs = 2000,   # 0.7.0: Whisper small y pausa de 650 ms, más preciso y más lento que base (0,8 s)
+    [int]$MaxVozMb = 500,        # 0.7.0: small ocupa ~330 MB de mediana (base: ~165)
     [int]$MinFrases = 4
 )
 $ErrorActionPreference = 'Stop'

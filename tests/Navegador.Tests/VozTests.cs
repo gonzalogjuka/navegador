@@ -122,9 +122,9 @@ public class PhraseSegmenterTests
         var p = Assert.Single(phrases);
         Assert.Equal("pausa", p.Reason);
         Assert.InRange(p.SpeechMs, 2000 - WindowMs, 2000 + WindowMs);
-        // Lleva un poco del audio anterior (192 ms) y sólo 160 ms del silencio final, no los 450 de la pausa.
+        // Lleva un poco del audio anterior (320 ms) y sólo 160 ms del silencio final, no los 650 de la pausa.
         var ms = p.Samples.Length / 16;
-        Assert.InRange(ms, 2000 + 192 + 160 - 2 * WindowMs, 2000 + 192 + 160 + 2 * WindowMs);
+        Assert.InRange(ms, 2000 + 320 + 160 - 2 * WindowMs, 2000 + 320 + 160 + 2 * WindowMs);
     }
 
     [Fact]
@@ -187,6 +187,23 @@ public class PhraseSegmenterTests
         var phrases = Run(New(new SegmenterOptions { PauseMs = 200 }), (1000, true), (300, false), (1000, true), (300, false));
         Assert.Equal(2, phrases.Count);
     }
+
+    [Fact]
+    public void A_short_phrase_waits_and_joins_what_comes_next()
+    {
+        // "Hola" (0,5 s), una pausa que ya cortaría una frase normal, y sigue hablando: sale una sola frase.
+        var phrases = Run(New(), (500, true), (900, false), (1500, true), (800, false));
+        var p = Assert.Single(phrases);
+        Assert.InRange(p.SpeechMs, 2000 - 2 * WindowMs, 2000 + 2 * WindowMs);
+    }
+
+    [Fact]
+    public void A_short_phrase_alone_still_goes_out_after_the_hold()
+    {
+        Assert.Empty(Run(New(), (500, true), (1200, false))); // todavía esperando
+        var p = Assert.Single(Run(New(), (500, true), (1700, false)));
+        Assert.Equal("pausa", p.Reason);
+    }
 }
 
 public class PhraseTextTests
@@ -199,6 +216,9 @@ public class PhraseTextTests
     [InlineData(" [Music] Good morning. ", "Good morning.")]
     [InlineData("*coughs* Sorry.", "Sorry.")]
     [InlineData("Thanks for watching!", "")]
+    [InlineData("Subscribe!", "")]
+    [InlineData("Please like and subscribe to the channel.", "")]
+    [InlineData("¡Suscríbete!", "")]
     [InlineData("you", "")]
     [InlineData("...", "")]
     [InlineData("", "")]

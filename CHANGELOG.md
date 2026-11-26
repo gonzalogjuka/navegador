@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — 2026-11-26: traducción más precisa (Whisper small, frases enteras)
+Sale de una sesión de diagnóstico en vivo con la voz de Gonzalo: 55 frases reales, cada una reanalizada con base, small y medium (banco privado en `%LOCALAPPDATA%\Navegador\banco-voz\2026-11-26`, fuera del repo). Contra la transcripción de medium, base acertó 20 % y small 34 %; small ganó 22 frases, empató 26 y perdió 7. En frases de 1–2 s: base 19 %, small 43 %. base además cambiaba el sentido ("Si ya te quiero decir algo" → "and you will want to die"; small: "If I want to tell you something").
+- **Whisper small q5_1** (181 MB, SHA-256 verificado) en vez de base (57 MB). El modelo viejo se borra solo.
+- **Pausa que corta la frase: 650 ms** (antes 450): hablando de corrido, las frases salían partidas por la mitad.
+- **Las frases cortas esperan**: con menos de 0,8 s de voz no salen solas en la primera pausa; si seguís hablando se juntan con lo que sigue, y si no, salen solas a los 1,5 s. 19 de 55 frases duraban menos de 1 s, y ahí todos los modelos inventaban ("chau" → "Thank you", "¡Suscríbete!").
+- **Se conserva más audio antes de la voz: 320 ms** (antes 192): en todas las frases la voz sonaba desde la primera muestra, o sea que se comía el arranque ("me escuchás" → "cuuchas").
+- Se filtran los pedidos de suscripción que inventa Whisper ("Subscribe", "Suscríbete").
+- **Costo, medido** (`tools/smoke/voz.ps1`, i5-9600K, 3 hilos, 12 de 12): demora de tu última palabra a la voz inglesa mediana 1,6 s, peor 2,5 s (antes ~0,8 s); traductor 272 MB de mediana, máx. 405 (antes ~165). Umbrales de la prueba: 2000 ms y 500 MB.
+- Hallazgo, sin arreglo en el código: el micrófono USB de Gonzalo capta muy apagado (grabado directo: 98 % de la energía bajo 1 kHz, 1,9 % entre 1 y 4 kHz, donde están las consonantes). Es la causa principal de los errores que quedan; ni medium entiende ese audio.
+
 ## 0.6.2 — 2026-11-26: el menú de permisos se lee
 - El menú del candado ya no usa submenús: el submenú de WPF se dibujaba claro y con el texto claro del tema no se leía nada. Ahora cada permiso es un título con sus tres opciones debajo, y la elegida va en negrita, en celeste y con ✓.
 

@@ -8,14 +8,27 @@ public sealed record Phrase(float[] Samples, string Reason, double LastVoiceMs, 
 
 public sealed record SegmenterOptions
 {
-    /// <summary>Silencio que corta una frase (450 ms dio mejor traducción que cortar por palabras; fase 7).</summary>
-    public int PauseMs { get; init; } = 450;
+    /// <summary>
+    /// Silencio que corta una frase. 450 ms (fase 7) partía las frases a la mitad hablando de corrido ("actualmente lo
+    /// hace con un leve retardo, pero…" en dos); con 650 ms quedan enteras (sesión en vivo del 26/11, 55 frases).
+    /// </summary>
+    public int PauseMs { get; init; } = 650;
     /// <summary>Una frase más larga se corta igual, para no acumular demora.</summary>
     public int MaxPhraseMs { get; init; } = 8000;
     /// <summary>Menos voz que esto es ruido, no una frase.</summary>
     public int MinSpeechMs { get; init; } = 300;
-    /// <summary>Audio de antes de la primera ventana con voz que se conserva (el detector avisa un poco tarde).</summary>
-    public int PreRollMs { get; init; } = 192;
+    /// <summary>
+    /// Una frase con menos voz que esto no sale sola en la primera pausa: espera a ver si seguís hablando y se junta con
+    /// lo que sigue. Con menos de 1 s Whisper adivina ("chau" → "Thank you", "¡Suscríbete!"): 19 de 55 frases del 26/11.
+    /// </summary>
+    public int MinPhraseMs { get; init; } = 800;
+    /// <summary>Silencio después del cual una frase corta sale igual, sola ("sí", "ok").</summary>
+    public int ShortHoldMs { get; init; } = 1500;
+    /// <summary>
+    /// Audio de antes de la primera ventana con voz que se conserva (el detector avisa un poco tarde). 192 ms se comía el
+    /// arranque: en todas las frases del 26/11 la voz sonaba desde la primera muestra ("me escuchás" → "cuuchas").
+    /// </summary>
+    public int PreRollMs { get; init; } = 320;
     /// <summary>Silencio que se deja al final de la frase; el resto de la pausa no se le pasa al reconocedor.</summary>
     public int TailMs { get; init; } = 160;
 }
@@ -93,7 +106,8 @@ public sealed class PhraseSegmenter(Func<float[], bool> isSpeech, SegmenterOptio
             return;
         }
         _phrase.Add(copy);
-        if (_silenceMs >= _o.PauseMs) Emit("pausa", onPhrase);
+        // Una frase corta espera a ver si seguís hablando (se junta con lo que sigue); si no, sale sola igual.
+        if (_silenceMs >= _o.PauseMs && (_speechMs >= _o.MinPhraseMs || _silenceMs >= _o.ShortHoldMs)) Emit("pausa", onPhrase);
         else if (_phrase.Count * WindowMs >= _o.MaxPhraseMs) Emit("larga", onPhrase);
     }
 

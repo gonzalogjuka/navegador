@@ -10,10 +10,17 @@ internal static class ModelStore
 {
     public sealed record Model(string File, string Url, long Size, string Sha256, string Label);
 
-    /// <summary>Whisper base multilingüe cuantizado (q5_1): 57 MB.</summary>
-    public static readonly Model Whisper = new("ggml-base-q5_1.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin",
-        59707625, "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898", "reconocimiento de voz");
+    /// <summary>
+    /// Whisper small multilingüe cuantizado (q5_1): 181 MB. Reemplaza a base (57 MB): en la sesión en vivo del 26/11
+    /// (55 frases de Gonzalo) small entendió el doble en frases de 1–2 s y no cambió el sentido ("Si ya te quiero decir
+    /// algo" → base: "and you will want to die"; small: "If I want to tell you something"), a ~0,6 s por frase.
+    /// </summary>
+    public static readonly Model Whisper = new("ggml-small-q5_1.bin",
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin",
+        190085487, "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb", "reconocimiento de voz");
+
+    /// <summary>Modelos que ya no se usan: se borran de la carpeta para no ocupar disco.</summary>
+    private static readonly string[] Obsolete = ["ggml-base-q5_1.bin"];
 
     /// <summary>Silero VAD 5.1.2: menos de 1 MB.</summary>
     public static readonly Model Vad = new("ggml-silero-v5.1.2.bin",
@@ -29,6 +36,7 @@ internal static class ModelStore
     public static void Ensure(string dir, Action<string, double> onProgress, CancellationToken ct)
     {
         Directory.CreateDirectory(dir);
+        foreach (var old in Obsolete) File.Delete(Path.Combine(dir, old));
         var missing = new[] { Vad, Whisper }.Where(m => !IsPresent(dir, m)).ToList();
         if (missing.Count == 0) return;
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
