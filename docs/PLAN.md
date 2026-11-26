@@ -141,6 +141,23 @@ instalación real de .NET desde el instalador (se probó detectar y bajar, no in
 (se probó en silencio); borrar los datos al desinstalar. Después: calidad de la traducción (`voz.ps1 -Volcar` deja cada
 frase con su texto para afinar).
 
+### Fase 9: que se entienda, rápido, con tus palabras y con voz natural (2026-11-26, hecho)
+
+Pedido de Gonzalo: lo más fluido, acertado y rápido posible, que aprenda con el uso, sin gastar mucha RAM, "hablar como
+un nativo inglés a través de mi voz en español". Detalle y evidencia en el CHANGELOG (0.8.0).
+
+| # | Qué | Resultado medido |
+|---|---|---|
+| 9.1 | **Una sola captura del micrófono por pestaña** y remuestreo con filtro (`virtual-mic.js`). Era la causa principal de las malas traducciones: el audio llegaba duplicado e intercalado. | 0,99 s de audio por segundo real con dos capturas vivas (antes 1,98) |
+| 9.2 | **Traducción por adelantado** (`PhraseSegmenter.TentativeMs`, `Astro.Voz/Translator.cs`): se traduce durante la pausa que confirma el fin de la frase. | Demora mediana 1077 ms (0.7.0: 1633) |
+| 9.3 | **Glosario + aprendizaje** (`Navegador.Core/Voz/Glossary.cs`): `voz-glosario.txt` y `voz-aprendido.json` van de pista a Whisper. | Supabase, Vercel, Kubernetes, Terraform: bien con pista, mal sin ella |
+| 9.4 | **Voz neuronal** Piper «ryan» (`NaturalVoice`), por tramos, con la de Windows de respaldo. | 130 ms el primer tramo; +~200 MB |
+
+Decisiones tomadas midiendo: small q5_1 se queda (q8_0 es 20 % más rápido pero +75 MB; medium tarda 2,3 s por frase);
+Kokoro suena mejor que Piper pero tarda el doble de lo que dura la frase en este procesador; la frase anterior como
+contexto empeora. Sigue valiendo "sólo el procesador" y "sin LLM". Pendiente: sesión en vivo con la voz de Gonzalo para
+un banco nuevo (el del 26/11 está grabado con el audio duplicado); clonar su voz quedó para después, por pedido suyo.
+
 **Regla de la fase (Gonzalo, 2026-11-25): el navegador funciona completo sin ningún LLM ni IA.** Las integraciones
 (API local, MCP, panel lateral, extensiones) son opcionales y se enchufan desde afuera: nada del navegador las necesita
 para andar, ninguna función propia llama a un servicio de IA, y si no hay nada conectado todo sigue igual (el modo
@@ -177,8 +194,10 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 ## Ajustes (`%LOCALAPPDATA%\Navegador\settings.json`)
 `RamBudgetMb` (1024), `SuspendAfterSeconds` (60), `DiscardAfterMinutes` (15), `FocusLostSeconds` (10),
 `BlockingEnabled` (true), `SearchUrl` (Google), `AllowSites` (escudo), `BrowserArguments` (`--process-per-site`),
-`HttpsFirst` (true), `BlockNotifications` (true), `VozEnabled` (true: traductor incorporado en el modo reunión). Se abren
-desde el menú ⋮ → Ajustes y se releen al reiniciar.
+`HttpsFirst` (true), `BlockNotifications` (true), `VozEnabled` (true: traductor incorporado en el modo reunión),
+`VozNatural` (true: voz inglesa neuronal; false: la de Windows, ~200 MB menos), `VozAprende` (true: anota los nombres
+que usás en `voz-aprendido.json`). Se abren desde el menú ⋮ → Ajustes y se releen al reiniciar. El glosario del
+traductor es `voz-glosario.txt`, en la misma carpeta.
 
 ## Riesgos conocidos
 - **RivaTuner Statistics Server (MSI Afterburner)** inyecta `RTSSHooks64.dll` y tira el proceso principal de WebView2

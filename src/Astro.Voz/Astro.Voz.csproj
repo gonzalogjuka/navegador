@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>astro-voz</AssemblyName>
     <RootNamespace>Astro.Voz</RootNamespace>
-    <Version>0.6.0</Version>
+    <Version>0.8.0</Version>
     <Product>Astro</Product>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
@@ -23,6 +23,8 @@
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
+    <!-- Voz inglesa neuronal (Piper). 1.13.x: las 2.x ya no traen espeak-ng adentro y no pueden pronunciar texto. -->
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
   </ItemGroup>
 
   <ItemGroup>

@@ -21,8 +21,34 @@ public static partial class PhraseText
     }
 
     /// <summary>
+    /// El texto en tramos (oraciones, o partes de una oración hasta una coma), para ir diciéndolos de a uno: el primero
+    /// empieza a sonar mientras se arma la voz de los demás. Los muy cortos se quedan pegados al siguiente: "Dr. Smith",
+    /// "Ok. Let's go." y "Hello everyone, thank you" no se parten.
+    /// </summary>
+    public static IReadOnlyList<string> Sentences(string text, int minChars = 40)
+    {
+        var result = new List<string>();
+        var current = "";
+        foreach (var piece in SentenceEnd().Split(text))
+        {
+            if (piece.Length == 0) continue;
+            current = current.Length == 0 ? piece : current + " " + piece;
+            if (current.Length < minChars) continue;
+            result.Add(current);
+            current = "";
+        }
+        if (current.Length == 0) return result;
+        if (result.Count > 0 && current.Length < minChars) result[^1] += " " + current;
+        else result.Add(current);
+        return result;
+    }
+
+    [GeneratedRegex(@"(?<=[.!?…,;:])\s+")]
+    private static partial Regex SentenceEnd();
+
+    /// <summary>
     /// Una secuencia repetida seguida queda una sola vez: 1 o 2 palabras repetidas 3 veces o más ("no no no"; "very very
-    /// good" se respeta), o 3 a 16 palabras repetidas 2 veces o más. Si después de la repetición el texto termina con el
+    /// good" se respeta), o 3 a 30 palabras repetidas 2 veces o más. Si después de la repetición el texto termina con el
     /// comienzo de otra vuelta (Whisper cortó por el tope de largo), ese resto también se va. Medido en la prueba de
     /// punta a punta: "Atmolysis, del griego, atmis, vapor, and lean." dicho dos veces y media = el triple de voz.
     /// </summary>
@@ -34,7 +60,7 @@ public static partial class PhraseText
         while (i < words.Length)
         {
             var collapsed = false;
-            for (var n = 1; n <= 16 && i + n * 2 <= words.Length; n++)
+            for (var n = 1; n <= 30 && i + n * 2 <= words.Length; n++)
             {
                 var repeats = 1;
                 while (i + (repeats + 1) * n <= words.Length && Same(words, i, i + repeats * n, n)) repeats++;

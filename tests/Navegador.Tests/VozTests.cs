@@ -98,7 +98,10 @@ public class PhraseSegmenterTests
         return pcm;
     }
 
-    private static List<Phrase> Run(PhraseSegmenter s, params (int Ms, bool Voice)[] parts)
+    private static List<Phrase> Run(PhraseSegmenter s, params (int Ms, bool Voice)[] parts) => Run(s, null, parts);
+
+    /// <param name="tentatives">Si no es null, recibe los adelantos (null = adelanto anulado).</param>
+    private static List<Phrase> Run(PhraseSegmenter s, List<Phrase?>? tentatives, params (int Ms, bool Voice)[] parts)
     {
         var phrases = new List<Phrase>();
         double now = 0;
@@ -109,7 +112,7 @@ public class PhraseSegmenterTests
             for (var at = 0; at < audio.Length; at += 672)
             {
                 now += 21;
-                s.Push(audio.AsSpan(at, Math.Min(672, audio.Length - at)), now, phrases.Add);
+                s.Push(audio.AsSpan(at, Math.Min(672, audio.Length - at)), now, phrases.Add, tentatives is null ? null : tentatives.Add);
             }
         }
         return phrases;
@@ -152,12 +155,12 @@ public class PhraseSegmenterTests
     [Fact]
     public void Talking_without_pauses_is_cut_at_the_maximum()
     {
-        var phrases = Run(New(), (20_000, true), (700, false));
-        Assert.Equal(3, phrases.Count); // 8 s + 8 s + el resto
+        var phrases = Run(New(), (25_000, true), (700, false));
+        Assert.Equal(3, phrases.Count); // 10 s + 10 s + el resto
         Assert.Equal(["larga", "larga", "pausa"], phrases.Select(p => p.Reason));
-        Assert.All(phrases.Take(2), p => Assert.InRange(p.Samples.Length / 16, 8000 - WindowMs, 8000 + WindowMs));
+        Assert.All(phrases.Take(2), p => Assert.InRange(p.Samples.Length / 16, 10_000 - WindowMs, 10_000 + WindowMs));
         // Nada se pierde ni se repite: entre las tres suman lo hablado (más el silencio final que se conserva).
-        Assert.InRange(phrases.Sum(p => p.Samples.Length) / 16, 20_000, 20_000 + 160 + 2 * WindowMs);
+        Assert.InRange(phrases.Sum(p => p.Samples.Length) / 16, 25_000, 25_000 + 160 + 2 * WindowMs);
     }
 
     [Fact]
@@ -191,18 +194,67 @@ public class PhraseSegmenterTests
     [Fact]
     public void A_short_phrase_waits_and_joins_what_comes_next()
     {
-        // "Hola" (0,5 s), una pausa que ya cortaría una frase normal, y sigue hablando: sale una sola frase.
-        var phrases = Run(New(), (500, true), (900, false), (1500, true), (800, false));
+        // "Hola" (0,4 s), una pausa que ya cortaría una frase normal, y sigue hablando: sale una sola frase.
+        var phrases = Run(New(), (400, true), (800, false), (1500, true), (800, false));
         var p = Assert.Single(phrases);
-        Assert.InRange(p.SpeechMs, 2000 - 2 * WindowMs, 2000 + 2 * WindowMs);
+        Assert.InRange(p.SpeechMs, 1900 - 2 * WindowMs, 1900 + 2 * WindowMs);
     }
 
     [Fact]
     public void A_short_phrase_alone_still_goes_out_after_the_hold()
     {
-        Assert.Empty(Run(New(), (500, true), (1200, false))); // todavía esperando
-        var p = Assert.Single(Run(New(), (500, true), (1700, false)));
-        Assert.Equal("pausa", p.Reason);
+        Assert.Empty(Run(New(), (400, true), (800, false))); // todavía esperando
+        var alone = Assert.Single(Run(New(), (400, true), (1200, false)));
+        Assert.Equal("pausa", alone.Reason);
+    }
+
+    [Fact]
+    public void A_long_phrase_is_cut_at_a_short_pause()
+    {
+        // Una pausa de 400 ms no corta una frase normal, pero sí una que ya lleva más de 5 s.
+        Assert.Single(Run(New(), (2000, true), (400, false), (1000, true), (800, false)));
+        Assert.Equal(2, Run(New(), (5500, true), (400, false), (1000, true), (800, false)).Count);
+    }
+
+    [Fact]
+    public void The_tentative_phrase_is_exactly_the_phrase_that_comes_out()
+    {
+        var tentatives = new List<Phrase?>();
+        var p = Assert.Single(Run(New(), tentatives, (320, false), (2000, true), (800, false)));
+        var t = Assert.Single(tentatives);
+        Assert.NotNull(t);
+        // Mismo audio muestra por muestra: lo traducido por adelantado vale para la frase definitiva.
+        Assert.Equal(t.Samples, p.Samples);
+        Assert.Equal(t.LastVoiceMs, p.LastVoiceMs);
+    }
+
+    [Fact]
+    public void The_tentative_comes_long_before_the_pause_that_confirms()
+    {
+        var tentatives = new List<Phrase?>();
+        // 250 ms de silencio: todavía no hay frase, pero el adelanto ya salió.
+        Assert.Empty(Run(New(), tentatives, (2000, true), (250, false)));
+        Assert.NotNull(Assert.Single(tentatives));
+    }
+
+    [Fact]
+    public void Talking_again_withdraws_the_tentative()
+    {
+        var tentatives = new List<Phrase?>();
+        var p = Assert.Single(Run(New(), tentatives, (1500, true), (300, false), (1500, true), (800, false)));
+        Assert.Equal(3, tentatives.Count);
+        Assert.NotNull(tentatives[0]);
+        Assert.Null(tentatives[1]);             // siguió hablando: lo adelantado no vale
+        Assert.Equal(tentatives[2]!.Samples, p.Samples);
+        Assert.True(tentatives[2]!.Samples.Length > tentatives[0]!.Samples.Length);
+    }
+
+    [Fact]
+    public void Noise_gets_no_tentative()
+    {
+        var tentatives = new List<Phrase?>();
+        Run(New(), tentatives, (500, false), (150, true), (1000, false));
+        Assert.Empty(tentatives);
     }
 }
 
@@ -250,5 +302,25 @@ public class PhraseTextTests
     {
         Assert.Equal("very very good", PhraseText.Clean("very very good"));
         Assert.Equal("We go to the park and we go to the beach.", PhraseText.Clean("We go to the park and we go to the beach."));
+    }
+
+    [Fact]
+    public void A_whole_sentence_said_twice_is_said_once()
+    {
+        const string once = "I would like to know what you think of the budget, because I think we are getting short.";
+        Assert.Equal(once, PhraseText.Clean(once + " " + once));
+    }
+
+    [Fact]
+    public void Sentences_split_long_text_and_keep_short_pieces_together()
+    {
+        Assert.Equal(["Hello everyone, thank you for joining the meeting.", "Today I want to show you the progress of the project."],
+            PhraseText.Sentences("Hello everyone, thank you for joining the meeting. Today I want to show you the progress of the project."));
+        Assert.Equal(["Ok. Let's go."], PhraseText.Sentences("Ok. Let's go."));
+        Assert.Equal(["Dr. Smith said the release is ready for production. Great!"],
+            PhraseText.Sentences("Dr. Smith said the release is ready for production. Great!"));
+        Assert.Equal(["What worries me the most is the cost of the virtual machines,", "which last month got out of hand, so I set up a board."],
+            PhraseText.Sentences("What worries me the most is the cost of the virtual machines, which last month got out of hand, so I set up a board."));
+        Assert.Empty(PhraseText.Sentences(""));
     }
 }

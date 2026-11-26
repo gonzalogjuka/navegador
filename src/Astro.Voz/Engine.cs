@@ -32,7 +32,7 @@ internal sealed class Engine : IDisposable
     /// <summary>
     /// Sólo el procesador, nunca la placa de video: Astro no lleva la biblioteca de GPU de Whisper. Con una dedicada
     /// (RTX 2060 SUPER) Vulkan tardaba 15 s en arrancar la primera vez y las primeras frases 9 s; en una integrada ocupa
-    /// 450–700 MB de la memoria de la PC. El procesador da ~770 ms por frase con ~165 MB, parejo en toda PC.
+    /// 450–700 MB de la memoria de la PC.
     /// </summary>
     public static Engine Load(string modelPath, int threads)
     {
@@ -44,7 +44,13 @@ internal sealed class Engine : IDisposable
     }
 
     /// <summary>Texto en inglés de la frase, ya limpio; "" si no hay nada para decir.</summary>
-    public string Translate(float[] samples)
+    /// <param name="prompt">
+    /// Pista con el vocabulario propio (<see cref="Glossary.Prompt"/>): Whisper escribe bien los nombres que ve ahí.
+    /// La frase anterior NO va de pista: medido, tarda más y traduce peor.
+    /// </param>
+    /// <param name="cancel">Corta la traducción en curso (un adelanto que ya no sirve) en ~15 ms.</param>
+    /// <exception cref="OperationCanceledException">Se cortó por <paramref name="cancel"/>.</exception>
+    public string Translate(float[] samples, string? prompt = null, CancellationToken cancel = default)
     {
         if (samples.Length < MinSamples) Array.Resize(ref samples, MinSamples);
         var context = Math.Clamp(samples.Length / SamplesPerContext + ContextMargin, MinContext, MaxContext);
@@ -54,12 +60,22 @@ internal sealed class Engine : IDisposable
         _text.Clear();
         // Sin reintentos con más temperatura (TemperatureInc 0): una sola pasada, demora pareja. Si igual repite,
         // PhraseText deja la repetición una sola vez.
-        using var processor = _factory.CreateBuilder()
+        var builder = _factory.CreateBuilder()
             .WithLanguage("es").WithTranslate().WithNoContext().WithSingleSegment()
-            .WithThreads(_threads).WithTemperatureInc(0).WithAudioContextSize(context).WithMaxTokensPerSegment(maxTokens)
-            .WithSegmentEventHandler(segment => _text.Append(segment.Text))
-            .Build();
-        processor.Process(samples);
+            .WithThreads(_threads).WithTemperatureInc(0).WithAudioContextSize(context).WithMaxTokensPerSegment(maxTokens);
+        if (!string.IsNullOrEmpty(prompt)) builder.WithPrompt(prompt);
+        var processor = builder.Build();
+        try
+        {
+            foreach (var segment in processor.ProcessAsync(samples, cancel).ToBlockingEnumerable(cancel))
+                _text.Append(segment.Text);
+        }
+        finally
+        {
+            // DisposeAsync espera a que whisper.cpp suelte la frase (cortada o no); Dispose a secas no se puede usar ahí.
+            processor.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        cancel.ThrowIfCancellationRequested();
         return PhraseText.Clean(_text.ToString());
     }
 

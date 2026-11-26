@@ -36,6 +36,16 @@ public sealed class Settings
     /// conectes una app de traducción por la API local.
     /// </summary>
     public bool VozEnabled { get; set; } = true;
+    /// <summary>
+    /// Voz inglesa neuronal (suena a una persona; ~190 MB más de memoria durante la reunión y 60 MB de descarga la
+    /// primera vez). Apagada, o si no se puede cargar, se usa la voz de Windows (robótica, casi sin memoria).
+    /// </summary>
+    public bool VozNatural { get; set; } = true;
+    /// <summary>
+    /// El traductor anota los nombres propios y siglas que usás (sólo los términos, nunca frases; en voz-aprendido.json)
+    /// para escribirlos y decirlos bien la próxima vez. Las ventanas privadas nunca se aprenden.
+    /// </summary>
+    public bool VozAprende { get; set; } = true;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

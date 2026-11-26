@@ -13,6 +13,9 @@
 window.medicion = null;
 (async () => {
   try {
+    // Como Meet y compañía: el micrófono se pide más de una vez (vista previa + reunión) y las dos capturas quedan
+    // vivas. Al traductor le tiene que llegar la voz una sola vez (voz.ps1 lo controla).
+    window.vistaPrevia = await navigator.mediaDevices.getUserMedia({ audio: true });
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const track = stream.getAudioTracks()[0];
     const ctx = new AudioContext();

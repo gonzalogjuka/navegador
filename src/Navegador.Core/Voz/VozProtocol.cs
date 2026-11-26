@@ -13,6 +13,8 @@ public enum VozFrame : byte
     TabClosed = 2,
     /// <summary>Terminar.</summary>
     Bye = 3,
+    /// <summary>Lo que se diga en esta pestaña no se aprende (ventana privada): int32 pestaña.</summary>
+    NoLearn = 4,
 
     // Traductor → Astro
     /// <summary>JSON <see cref="VozStatus"/>: qué está preparando.</summary>
@@ -42,14 +44,19 @@ public sealed record VozStatus(string Phase, string Detail, double Progress = 0)
 
 /// <param name="HighPriority">El proceso quedó con prioridad alta y sin ahorro de energía.</param>
 /// <param name="Mmcss">Los hilos de audio quedaron anotados en el planificador multimedia de Windows.</param>
-public sealed record VozReady(string Asr, string? Voice, int Threads, int LoadMs, bool HighPriority = false, bool Mmcss = false);
+/// <param name="GlossaryTerms">Términos del glosario y aprendidos que van de pista al reconocedor.</param>
+public sealed record VozReady(string Asr, string? Voice, int Threads, int LoadMs, bool HighPriority = false, bool Mmcss = false,
+    int GlossaryTerms = 0);
 
 /// <param name="Spoken">false: la frase no tenía nada para decir (ruido, silencio) y no se mandó voz.</param>
-/// <param name="TotalMs">De tu última palabra a que sale la voz traducida.</param>
+/// <param name="TtsMs">Lo que tardó en estar lista la voz de la primera oración.</param>
+/// <param name="TotalMs">De tu última palabra a que sale la voz traducida (la primera oración).</param>
 /// <param name="Merged">Frases atrasadas que se juntaron en una (1 = ninguna).</param>
 /// <param name="Pending">Frases esperando turno cuando salió esta.</param>
 /// <param name="Chars">Largo del texto en inglés (el texto no viaja ni se guarda).</param>
-public sealed record VozPhrase(int Tab, bool Spoken, string Reason, int AudioMs, int AsrMs, int TtsMs, int TotalMs, int Merged, int Pending, int Chars = 0);
+/// <param name="Speculated">Se empezó a traducir antes de confirmar que la frase había terminado (adelanto).</param>
+public sealed record VozPhrase(int Tab, bool Spoken, string Reason, int AudioMs, int AsrMs, int TtsMs, int TotalMs, int Merged, int Pending,
+    int Chars = 0, bool Speculated = false);
 
 /// <param name="Fatal">true: el traductor no puede seguir (la reunión lleva la voz original).</param>
 public sealed record VozError(string Message, bool Fatal);
@@ -84,9 +91,13 @@ public static class VozProtocol
         return frame;
     }
 
-    public static byte[] TabClosed(int tab)
+    public static byte[] TabClosed(int tab) => TabFrame(VozFrame.TabClosed, tab);
+
+    public static byte[] NoLearn(int tab) => TabFrame(VozFrame.NoLearn, tab);
+
+    private static byte[] TabFrame(VozFrame type, int tab)
     {
-        var frame = NewFrame(VozFrame.TabClosed, 4);
+        var frame = NewFrame(type, 4);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(HeaderSize), tab);
         return frame;
     }

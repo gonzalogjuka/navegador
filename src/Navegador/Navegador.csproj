@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <!-- Nombre visible: Astro (lo que muestran Windows y el instalador). El ejecutable, los espacios de nombres y la
          carpeta de datos siguen llamándose Navegador. -->
     <Product>Astro</Product>

@@ -69,6 +69,9 @@ public sealed class MeetingHub
         if (_sessions.Remove(tab.Id)) Notify();
     }
 
+    /// <summary>La pestaña en reunión está en una ventana privada.</summary>
+    internal bool IsPrivate(int tabId) => _sessions.TryGetValue(tabId, out var s) && s.Window.IsPrivate;
+
     /// <summary>Algo cambió (traductor, pestañas, micrófono): refrescan las ventanas y se le avisa al traductor.</summary>
     internal void Notify()
     {

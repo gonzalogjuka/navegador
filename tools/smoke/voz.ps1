@@ -19,8 +19,9 @@ param(
     [switch]$Carga,
     [switch]$Limpio,
     [switch]$Volcar,             # deja cada frase (WAV + texto en inglés) en %TEMP%\astro-voz-prueba\frases, para afinar
-    [int]$MaxMedianaMs = 2000,   # 0.7.0: Whisper small y pausa de 650 ms, más preciso y más lento que base (0,8 s)
-    [int]$MaxVozMb = 500,        # 0.7.0: small ocupa ~330 MB de mediana (base: ~165)
+    [switch]$VozWindows,         # con la voz de Windows en vez de la neuronal (VozNatural = false): ~200 MB menos
+    [int]$MaxMedianaMs = 1500,   # 0.8.0: small + adelanto (se traduce durante la pausa); la 0.7.0 medía 1633 ms
+    [int]$MaxVozMb = 700,        # 0.8.0: small (~270 MB) + voz neuronal (~200-280 MB)
     [int]$MinFrases = 4
 )
 $ErrorActionPreference = 'Stop'
@@ -35,7 +36,7 @@ if ($Limpio) { Remove-Item (Join-Path $data 'modelos') -Recurse -Force -ErrorAct
 
 $browserArgs = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required ' +
     "--use-file-for-fake-audio-capture=$($Wav -replace '\\', '/')"
-@{ ApiEnabled = $false; BrowserArguments = $browserArgs } | ConvertTo-Json |
+@{ ApiEnabled = $false; BrowserArguments = $browserArgs; VozNatural = -not $VozWindows } | ConvertTo-Json |
     Set-Content (Join-Path $data 'settings.json') -Encoding UTF8
 
 $page = ([Uri](Resolve-Path (Join-Path $PSScriptRoot 'reunion.html')).Path).AbsoluteUri
@@ -82,6 +83,13 @@ $spoken = @($phrases | Where-Object { $_.spoken })
 $merged = @($phrases | Where-Object { $_.merged -gt 1 })
 $errors = @(Get-Events 'voz_error', 'automation_error', 'meeting_error')
 $exits = @(Get-Events 'voz_exit')
+# Segundos de audio que recibió el traductor por cada segundo real, entre el primer y el último voz_stats. Tiene que
+# dar 1: si da 2, dos capturas del micrófono están mandando a la vez (pasó hasta la 0.7.0) y no se entiende nada.
+$allStats = @(Get-Events 'voz_stats')
+$audioRate = if ($allStats.Count -ge 2 -and $allStats[-1].ts -gt $allStats[0].ts) {
+    ($allStats[-1].windows - $allStats[0].windows) * 0.032 / ($allStats[-1].ts - $allStats[0].ts)
+} else { $null }
+$speculated = @($spoken | Where-Object { $_.speculated })
 $stats = Get-Events 'voz_stats' | Select-Object -Last 1   # contadores del traductor (cada ~5 s de voz)
 $state = Get-Events 'meeting_state' | Select-Object -First 1
 $page2 = if ($state) { $state.state | ConvertFrom-Json } else { $null }
@@ -106,6 +114,7 @@ $checks = [ordered]@{
     'el traductor quedó listo'                    = { [bool]$ready }
     'la voz tiene prioridad (proceso y MMCSS)'    = { $ready -and $ready.high_priority -and $ready.mmcss }
     'la voz llegó al traductor y oyó voz'         = { $stats -and $stats.mic_frames -gt 0 -and $stats.voiced -gt 0 }
+    'la voz llega una sola vez (1 s por segundo)' = { $null -ne $audioRate -and $audioRate -gt 0.9 -and $audioRate -lt 1.1 }
     "frases dichas en inglés (>= $MinFrases)"     = { $spoken.Count -ge $MinFrases }
     "demora mediana <= $MaxMedianaMs ms"          = { $null -ne $median -and $median -le $MaxMedianaMs }
     "RAM del traductor <= $MaxVozMb MB"           = { $vozMb.Count -gt 0 -and $vozMax -le $MaxVozMb }
@@ -129,8 +138,11 @@ foreach ($k in $checks.Keys) {
 ''
 "corrida        {0:0} s · reunión {1} · {2} s traduciendo{3}" -f $took, $(if ($Url) { $Url } else { 'tools/smoke/reunion.html' }), $Seconds, $(if ($Carga) { ' · con pestañas pesadas' } else { '' })
 if ($ready) {
-    "traductor      procesador, $($ready.threads) hilos, $($ready.asr), voz «$($ready.voice)», listo en $($ready.load_ms) ms" +
+    "traductor      procesador, $($ready.threads) hilos, $($ready.asr), voz «$($ready.voice)», glosario $($ready.glossary_terms) términos, listo en $($ready.load_ms) ms" +
         " · prioridad alta: $(if ($ready.high_priority) { 'sí' } else { 'no' }) · MMCSS: $(if ($ready.mmcss) { 'sí' } else { 'no' })"
+}
+if ($null -ne $audioRate) {
+    "audio          {0:0.00} s de voz recibidos por segundo real · frases traducidas por adelantado: {1} de {2}" -f $audioRate, $speculated.Count, $spoken.Count
 }
 "frases         detectadas $($phrases.Count) · dichas $($spoken.Count) · sin nada que decir $($phrases.Count - $spoken.Count) · juntadas por atraso $($merged.Count)"
 if ($spoken.Count) {

@@ -57,21 +57,64 @@
     for (const s of sessions) s.originalGain.gain.setTargetAtTime(mode.original, t, 0.02);
   }
 
-  // Remuestreo lineal a 16 kHz, entero de 16 bits little-endian, en base64.
-  function encode(input, fromRate) {
+  // Remuestreo a 16 kHz con filtro pasa bajos y sin cortes entre pedazos (el estado sigue de un pedazo al otro).
+  // Antes era lineal y arrancaba de cero en cada pedazo: con el contexto a 96 kHz (placa de sonido a 96 kHz) tomaba
+  // una muestra de cada 6 sin filtrar y dejaba un salto cada 10 ms.
+  function resampler(fromRate) {
     const ratio = fromRate / CAPTURE_RATE;
-    const n = Math.floor(input.length / ratio);
-    const out = new Int16Array(n);
-    for (let i = 0; i < n; i++) {
-      const x = i * ratio, i0 = Math.floor(x), f = x - i0;
-      const a = input[i0], b = i0 + 1 < input.length ? input[i0 + 1] : a;
-      const v = Math.max(-1, Math.min(1, a + (b - a) * f));
-      out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+    const taps = ratio > 1 ? Math.round(ratio * 8) | 1 : 1, half = taps >> 1;
+    const h = new Float32Array(taps);
+    let sum = 0;
+    for (let i = 0; i < taps; i++) {
+      const n = i - half, fc = 0.45 / ratio;                 // corte un poco por debajo de 8 kHz
+      const sinc = n === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * n) / (Math.PI * n);
+      h[i] = taps === 1 ? 1 : sinc * (0.5 + 0.5 * Math.cos(Math.PI * n / (half + 1)));
+      sum += h[i];
     }
-    const bytes = new Uint8Array(out.buffer);
+    for (let i = 0; i < taps; i++) h[i] /= sum;
+    let buf = new Float32Array(0), filtered = new Float32Array(0);
+    let last = 0;   // última muestra filtrada del pedazo anterior
+    let pos = 0;    // dónde cae la próxima muestra de salida, en muestras de entrada desde el comienzo del pedazo
+    return input => {
+      const n = input.length;
+      if (buf.length !== n + taps - 1) { buf = new Float32Array(n + taps - 1); filtered = new Float32Array(n); }
+      else buf.copyWithin(0, n);                              // la cola del pedazo anterior queda al principio
+      buf.set(input, taps - 1);
+      for (let i = 0; i < n; i++) {
+        let acc = 0;
+        for (let k = 0; k < taps; k++) acc += h[k] * buf[i + k];
+        filtered[i] = acc;
+      }
+      const out = new Int16Array(Math.max(0, Math.ceil((n - 1 - pos) / ratio)));
+      let count = 0;
+      for (; pos < n - 1 && count < out.length; pos += ratio) {
+        const i0 = Math.floor(pos), f = pos - i0;
+        const a = i0 < 0 ? last : filtered[i0];
+        const v = Math.max(-1, Math.min(1, a + (filtered[i0 + 1] - a) * f));
+        out[count++] = v < 0 ? v * 0x8000 : v * 0x7fff;
+      }
+      pos -= n;
+      last = filtered[n - 1];
+      return count === out.length ? out : out.subarray(0, count);
+    };
+  }
+
+  // Entero de 16 bits little-endian, en base64.
+  function encode(out) {
+    const bytes = new Uint8Array(out.buffer, out.byteOffset, out.byteLength);
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
     return btoa(bin);
+  }
+
+  // La voz que va al traductor sale de UNA sola captura: la más nueva que esté viva y sin silenciar. Los sitios de
+  // reuniones piden el micrófono más de una vez (vista previa, entrar, cambiar de dispositivo) y dejan varias vivas;
+  // si todas mandan, al traductor le llega el audio duplicado e intercalado y no entiende nada (medido el 26/11:
+  // 1,98 s de audio por segundo real).
+  function capturing() {
+    let chosen = null;
+    for (const s of sessions) if (s.real.enabled && s.real.readyState === 'live') chosen = s;
+    return chosen;
   }
 
   function decode(b64) {
@@ -127,16 +170,20 @@
     sink.gain.value = 0;
     source.connect(tap);
     tap.connect(sink).connect(c.destination);
+    let resample = null;
     tap.onaudioprocess = e => {
-      if (!mode.capture || !realAudio.enabled || realAudio.readyState !== 'live') return;
-      post({ t: 'mic', rate: CAPTURE_RATE, pcm: encode(e.inputBuffer.getChannelData(0), c.sampleRate) });
+      if (!mode.capture || capturing() !== session) { resample = null; return; }
+      resample = resample || resampler(c.sampleRate);
+      const pcm = resample(e.inputBuffer.getChannelData(0));
+      if (!pcm.length) return;
+      post({ t: 'mic', rate: CAPTURE_RATE, pcm: encode(pcm) });
       sentAt.push(performance.now());
       if (sentAt.length > 200) sentAt.shift();
     };
 
     // Para la página es el micrófono real: nombre, ajustes y silenciar pasan a la pista real.
     const virtual = dest.stream.getAudioTracks()[0];
-    const session = { originalGain, virtual };
+    const session = { originalGain, virtual, real: realAudio };
     sessions.add(session);
     const enabledDesc = Object.getOwnPropertyDescriptor(MediaStreamTrack.prototype, 'enabled');
     Object.defineProperty(virtual, 'enabled', {

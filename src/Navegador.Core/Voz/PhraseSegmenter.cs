@@ -6,31 +6,42 @@ namespace Navegador.Core.Voz;
 /// <param name="LastVoiceMs">Reloj (el que recibe <see cref="PhraseSegmenter.Push"/>) de tu última palabra.</param>
 public sealed record Phrase(float[] Samples, string Reason, double LastVoiceMs, int SpeechMs);
 
+/// <summary>
+/// Tiempos del segmentador, en milisegundos de audio real. Los de la 0.7.0 se habían elegido con el audio duplicado
+/// (cada captura del micrófono mandaba su copia: el reloj corría al doble), así que valían la mitad de lo que decían.
+/// </summary>
 public sealed record SegmenterOptions
 {
     /// <summary>
-    /// Silencio que corta una frase. 450 ms (fase 7) partía las frases a la mitad hablando de corrido ("actualmente lo
-    /// hace con un leve retardo, pero…" en dos); con 650 ms quedan enteras (sesión en vivo del 26/11, 55 frases).
+    /// Silencio que corta una frase. No suma demora: la traducción arranca antes, a los <see cref="TentativeMs"/> de
+    /// silencio, y tarda más que lo que falta para llegar a esta pausa.
     /// </summary>
     public int PauseMs { get; init; } = 650;
-    /// <summary>Una frase más larga se corta igual, para no acumular demora.</summary>
-    public int MaxPhraseMs { get; init; } = 8000;
+    /// <summary>
+    /// Silencio a partir del cual se avisa "probablemente terminó la frase" para ir traduciendo. Las pausas entre
+    /// palabras duran menos; si era una pausa para respirar y seguís hablando, ese adelanto se descarta (cortarlo
+    /// cuesta ~15 ms). No puede ser menor que <see cref="TailMs"/>.
+    /// </summary>
+    public int TentativeMs { get; init; } = 128;
+    /// <summary>Una frase que ya dura esto se corta en la primera pausa corta (<see cref="LongPauseMs"/>).</summary>
+    public int LongPhraseMs { get; init; } = 5000;
+    /// <summary>Pausa que corta una frase que ya es larga: quien te escucha no espera al final del párrafo.</summary>
+    public int LongPauseMs { get; init; } = 320;
+    /// <summary>Hablando sin ninguna pausa, la frase se corta acá igual, para no acumular demora.</summary>
+    public int MaxPhraseMs { get; init; } = 10000;
     /// <summary>Menos voz que esto es ruido, no una frase.</summary>
     public int MinSpeechMs { get; init; } = 300;
     /// <summary>
     /// Una frase con menos voz que esto no sale sola en la primera pausa: espera a ver si seguís hablando y se junta con
-    /// lo que sigue. Con menos de 1 s Whisper adivina ("chau" → "Thank you", "¡Suscríbete!"): 19 de 55 frases del 26/11.
+    /// lo que sigue (con muy poco audio el reconocedor adivina).
     /// </summary>
-    public int MinPhraseMs { get; init; } = 800;
+    public int MinPhraseMs { get; init; } = 500;
     /// <summary>Silencio después del cual una frase corta sale igual, sola ("sí", "ok").</summary>
-    public int ShortHoldMs { get; init; } = 1500;
-    /// <summary>
-    /// Audio de antes de la primera ventana con voz que se conserva (el detector avisa un poco tarde). 192 ms se comía el
-    /// arranque: en todas las frases del 26/11 la voz sonaba desde la primera muestra ("me escuchás" → "cuuchas").
-    /// </summary>
+    public int ShortHoldMs { get; init; } = 1000;
+    /// <summary>Audio de antes de la primera ventana con voz que se conserva (el detector avisa un poco tarde).</summary>
     public int PreRollMs { get; init; } = 320;
     /// <summary>Silencio que se deja al final de la frase; el resto de la pausa no se le pasa al reconocedor.</summary>
-    public int TailMs { get; init; } = 160;
+    public int TailMs { get; init; } = 128;
 }
 
 /// <summary>
@@ -50,7 +61,7 @@ public sealed class PhraseSegmenter(Func<float[], bool> isSpeech, SegmenterOptio
     private int _fill;
     private readonly Queue<float[]> _preRoll = new();
     private readonly List<float[]> _phrase = [];
-    private bool _active;
+    private bool _active, _tentative;
     private int _speechMs, _silenceMs;
     private double _lastVoiceMs;
 
@@ -59,14 +70,20 @@ public sealed class PhraseSegmenter(Func<float[], bool> isSpeech, SegmenterOptio
 
     /// <summary>Voz del micrófono: PCM de 16 bits a 16 kHz, en pedazos de cualquier tamaño.</summary>
     /// <param name="nowMs">Reloj monótono en ms del momento en que llegó el pedazo.</param>
-    public void Push(ReadOnlySpan<byte> pcm16, double nowMs, Action<Phrase> onPhrase)
+    /// <param name="onPhrase">Una frase terminada.</param>
+    /// <param name="onTentative">
+    /// Adelanto: recibe la frase tal como saldría si el silencio sigue (mismo audio, muestra por muestra), para ir
+    /// traduciéndola; o null si después del adelanto volviste a hablar y ya no vale. Después de un adelanto que no se
+    /// anuló, la próxima frase que sale es esa misma.
+    /// </param>
+    public void Push(ReadOnlySpan<byte> pcm16, double nowMs, Action<Phrase> onPhrase, Action<Phrase?>? onTentative = null)
     {
         for (var i = 0; i + 1 < pcm16.Length; i += 2)
         {
             _window[_fill++] = (short)(pcm16[i] | (pcm16[i + 1] << 8)) / 32768f;
             if (_fill < Window) continue;
             _fill = 0;
-            OnWindow(nowMs, onPhrase);
+            OnWindow(nowMs, onPhrase, onTentative);
         }
     }
 
@@ -77,7 +94,7 @@ public sealed class PhraseSegmenter(Func<float[], bool> isSpeech, SegmenterOptio
         Reset();
     }
 
-    private void OnWindow(double nowMs, Action<Phrase> onPhrase)
+    private void OnWindow(double nowMs, Action<Phrase> onPhrase, Action<Phrase?>? onTentative)
     {
         var voice = isSpeech(_window);
         var copy = (float[])_window.Clone();
@@ -89,6 +106,11 @@ public sealed class PhraseSegmenter(Func<float[], bool> isSpeech, SegmenterOptio
                 _speechMs = 0;
                 _phrase.AddRange(_preRoll);
                 _preRoll.Clear();
+            }
+            if (_tentative)
+            {
+                _tentative = false;
+                onTentative?.Invoke(null);
             }
             _speechMs += WindowMs;
             _silenceMs = 0;
@@ -106,29 +128,42 @@ public sealed class PhraseSegmenter(Func<float[], bool> isSpeech, SegmenterOptio
             return;
         }
         _phrase.Add(copy);
+        var phraseMs = _phrase.Count * WindowMs;
+        var pause = phraseMs - _silenceMs >= _o.LongPhraseMs ? _o.LongPauseMs : _o.PauseMs;
         // Una frase corta espera a ver si seguís hablando (se junta con lo que sigue); si no, sale sola igual.
-        if (_silenceMs >= _o.PauseMs && (_speechMs >= _o.MinPhraseMs || _silenceMs >= _o.ShortHoldMs)) Emit("pausa", onPhrase);
-        else if (_phrase.Count * WindowMs >= _o.MaxPhraseMs) Emit("larga", onPhrase);
+        if (_silenceMs >= pause && (_speechMs >= _o.MinPhraseMs || _silenceMs >= _o.ShortHoldMs)) Emit("pausa", onPhrase);
+        else if (phraseMs >= _o.MaxPhraseMs) Emit("larga", onPhrase);
+        else if (onTentative is not null && !_tentative && _silenceMs >= _o.TentativeMs && _silenceMs >= _o.TailMs
+                 && _speechMs >= _o.MinSpeechMs)
+        {
+            _tentative = true;
+            onTentative(Snapshot("pausa"));
+        }
+    }
+
+    /// <summary>La frase en curso como saldría ahora. De la pausa final sólo queda TailMs: el resto es silencio que el
+    /// reconocedor no necesita (por eso el adelanto y la frase definitiva llevan el mismo audio).</summary>
+    private Phrase Snapshot(string reason)
+    {
+        var drop = Math.Max(0, _silenceMs - _o.TailMs) / WindowMs;
+        var count = Math.Max(0, _phrase.Count - drop);
+        var samples = new float[count * Window];
+        for (var i = 0; i < count; i++) _phrase[i].CopyTo(samples, i * Window);
+        return new Phrase(samples, reason, _lastVoiceMs, _speechMs);
     }
 
     private void Emit(string reason, Action<Phrase> onPhrase)
     {
-        var speechMs = _speechMs;
-        // De la pausa final sólo queda TailMs: el resto es silencio que el reconocedor no necesita.
-        var drop = Math.Max(0, _silenceMs - _o.TailMs) / WindowMs;
-        var count = _phrase.Count - drop;
-        var samples = new float[Math.Max(0, count) * Window];
-        for (var i = 0; i < count; i++) _phrase[i].CopyTo(samples, i * Window);
-        var lastVoice = _lastVoiceMs;
+        var phrase = Snapshot(reason);
         Reset();
-        if (speechMs >= _o.MinSpeechMs) onPhrase(new Phrase(samples, reason, lastVoice, speechMs));
+        if (phrase.SpeechMs >= _o.MinSpeechMs) onPhrase(phrase);
     }
 
     private void Reset()
     {
         _phrase.Clear();
         _preRoll.Clear();
-        _active = false;
+        _active = _tentative = false;
         _speechMs = _silenceMs = 0;
     }
 }

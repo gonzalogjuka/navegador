@@ -6,54 +6,74 @@ using Navegador.Core.Voz;
 namespace Astro.Voz;
 
 /// <summary>
-/// Prueba sin navegador (--file): traduce un WAV entero con el mismo detector, segmentador, reconocedor y voz que usa
-/// la reunión, y deja en JSON las frases en inglés, lo que tardó cada una y la memoria del proceso.
+/// Prueba sin navegador (--file): pasa un WAV a ritmo de reunión (un pedazo de ~21 ms cada 21 ms) por el mismo detector,
+/// segmentador, traductor con adelanto y voz que usa la reunión, y deja en JSON las frases en inglés, la demora de cada
+/// una (de la última palabra a la voz inglesa) y la memoria del proceso. Tarda lo que dura el audio.
 /// </summary>
 internal static class FileTest
 {
-    private sealed record PhraseResult(int AudioMs, string Reason, string En, int AsrMs, int TtsMs, int TtsAudioMs);
+    private sealed record PhraseResult(int AudioMs, string Reason, string En, int AsrMs, int TtsMs, int TotalMs, bool Speculated,
+        int Merged, int TtsAudioMs);
 
     private sealed record Result(int Threads, string? Voice, int LoadMs, int DurationMs, IReadOnlyList<PhraseResult> Phrases,
-        int AsrMedianMs, int AsrMaxMs, int PrivateMb, int WorkingSetMb, int PeakWorkingSetMb);
+        int TotalMedianMs, int TotalMaxMs, int AsrMedianMs, int AsrMaxMs, int Withdrawn, IReadOnlyList<string> Glossary,
+        int PrivateMb, int WorkingSetMb, int PeakWorkingSetMb);
 
     public static int Run(Options options)
     {
         var started = Stopwatch.GetTimestamp();
-        ModelStore.Ensure(options.Models, (_, _) => { }, CancellationToken.None);
-        using var detector = new SpeechDetector(ModelStore.PathOf(options.Models, ModelStore.Vad));
-        using var engine = Engine.Load(ModelStore.PathOf(options.Models, ModelStore.Whisper), options.Threads);
-        using var voice = Voice.TryCreate();
+        using var setup = Setup.Load(options, (_, _, _) => { }, CancellationToken.None);
         var loadMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
+        var results = new List<PhraseResult>();
+        var audioBytes = 0;
+        var translator = new Translator(setup.Engine, setup.Voice, setup.Glossary, setup.LearnedPath)
+        {
+            OnAudio = (_, _, pcm) => audioBytes += pcm.Length,
+            OnDone = r =>
+            {
+                results.Add(new PhraseResult(r.Info.AudioMs, r.Info.Reason, r.English, r.Info.AsrMs, r.Info.TtsMs, r.Info.TotalMs,
+                    r.Info.Speculated, r.Info.Merged, audioBytes / 2 * 1000 / setup.Voice.Rate));
+                audioBytes = 0;
+            },
+            OnError = ex => results.Add(new PhraseResult(0, "error", ex.Message, 0, 0, 0, false, 1, 0)),
+        };
+        var worker = new Thread(translator.Run) { IsBackground = true, Name = "traducir" };
+        worker.Start();
+
         var pcm = ReadWavAs16k(options.File!);
-        var phrases = new List<Phrase>();
-        using (var stream = detector.NewStream())
+        var withdrawn = 0;
+        using (var stream = setup.Detector.NewStream())
         {
             var segmenter = new PhraseSegmenter(stream.IsSpeech);
             const int chunk = 682; // ~21 ms, como los pedazos que manda la pestaña en reunión
+            var clock = Stopwatch.StartNew();
             for (var i = 0; i < pcm.Length; i += chunk)
-                segmenter.Push(pcm.AsSpan(i, Math.Min(chunk, pcm.Length - i)), i / 32.0, phrases.Add);
-            segmenter.Flush(phrases.Add);
+            {
+                var due = i / 32.0 - clock.Elapsed.TotalMilliseconds;
+                if (due > 1) Thread.Sleep((int)due);
+                segmenter.Push(pcm.AsSpan(i, Math.Min(chunk, pcm.Length - i)), Translator.NowMs(), p => translator.Confirm(0, p), t =>
+                {
+                    if (t is not null) translator.Tentative(0, t);
+                    else { translator.Withdraw(0); withdrawn++; }
+                });
+            }
+            segmenter.Flush(p => translator.Confirm(0, p));
         }
+        // Lo que quedó en cola se termina de traducir antes de cerrar.
+        for (var waited = 0; translator.Done < translator.Phrases && waited < 30_000; waited += 20) Thread.Sleep(20);
+        translator.Stop();
+        worker.Join(TimeSpan.FromSeconds(5));
 
-        var results = new List<PhraseResult>();
-        foreach (var phrase in phrases)
-        {
-            var t0 = Stopwatch.GetTimestamp();
-            var english = engine.Translate(phrase.Samples);
-            var t1 = Stopwatch.GetTimestamp();
-            var audio = english.Length > 0 && voice is not null ? voice.Speak(english) : [];
-            var t2 = Stopwatch.GetTimestamp();
-            results.Add(new PhraseResult(phrase.Samples.Length * 1000 / Engine.Rate, phrase.Reason, english,
-                (int)Stopwatch.GetElapsedTime(t0, t1).TotalMilliseconds, (int)Stopwatch.GetElapsedTime(t1, t2).TotalMilliseconds,
-                audio.Length / 2 * 1000 / Voice.Rate));
-        }
-
+        var spoken = results.Where(r => r.En.Length > 0 && r.Reason != "error").ToList();
+        var total = spoken.Select(r => r.TotalMs).Order().ToList();
         var asr = results.Select(r => r.AsrMs).Order().ToList();
         using var me = Process.GetCurrentProcess();
         const int mb = 1024 * 1024;
-        var result = new Result(options.Threads, voice?.Name, loadMs, pcm.Length / 2 * 1000 / Engine.Rate, results,
-            asr.Count > 0 ? asr[asr.Count / 2] : 0, asr.Count > 0 ? asr[^1] : 0,
+        var result = new Result(options.Threads, setup.Voice.Name, loadMs, pcm.Length / 2 * 1000 / Engine.Rate, results,
+            total.Count > 0 ? total[total.Count / 2] : 0, total.Count > 0 ? total[^1] : 0,
+            asr.Count > 0 ? asr[asr.Count / 2] : 0, asr.Count > 0 ? asr[^1] : 0, withdrawn,
+            setup.Glossary is { } g ? [.. g.UserTerms, .. g.LearnedTerms] : [],
             (int)(me.PrivateMemorySize64 / mb), (int)(me.WorkingSet64 / mb), (int)(me.PeakWorkingSet64 / mb));
         var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         if (options.Out is not null) File.WriteAllText(options.Out, json, new UTF8Encoding(false));
