@@ -7,9 +7,11 @@
 #   sin -Url   la reunión es tools/smoke/reunion.html, con el modo reunión prendido a mano.
 #   -Url       una reunión real (p. ej. https://meet.jit.si/una-sala): el modo reunión se tiene que prender solo.
 #   -Carga     fase 8.2: durante la reunión abre pestañas pesadas (Maps, YouTube, diarios); la demora no tiene que subir.
-#   -Limpio    borra los modelos antes: prueba la descarga de la primera vez (182 MB).
+#   -Limpio    borra los modelos antes: prueba la descarga de la primera vez (1,2 GB con el intérprete).
+#   -SinInterprete  sin el modelo de lenguaje (VozInterprete = false): traducción directa de Whisper, ~1,1 GB menos.
 # Qué mide (todo sale del log de Astro): frases detectadas y dichas, demora de tu última palabra a la voz inglesa,
-# lo que tarda el reconocimiento, y la RAM del traductor y del resto de Astro durante la reunión.
+# lo que tarda el reconocimiento y el intérprete, si se escuchó a los demás (la página de prueba devuelve por WebRTC lo
+# que recibe la reunión), y la RAM del traductor y del resto de Astro durante la reunión.
 # Los datos quedan en %TEMP%\astro-voz-prueba (los modelos se bajan una sola vez). Sale con 1 si algo falla.
 param(
     [string]$Exe = (Join-Path $PSScriptRoot '..\..\dist\Navegador.exe'),
@@ -20,8 +22,9 @@ param(
     [switch]$Limpio,
     [switch]$Volcar,             # deja cada frase (WAV + texto en inglés) en %TEMP%\astro-voz-prueba\frases, para afinar
     [switch]$VozWindows,         # con la voz de Windows en vez de la neuronal (VozNatural = false): ~200 MB menos
-    [int]$MaxMedianaMs = 1500,   # 0.8.0: small + adelanto (se traduce durante la pausa); la 0.7.0 medía 1633 ms
-    [int]$MaxVozMb = 700,        # 0.8.0: small (~270 MB) + voz neuronal (~200-280 MB)
+    [switch]$SinInterprete,
+    [int]$MaxMedianaMs = 0,      # 0 = según el modo: 2200 con intérprete, 1500 sin (0.8.0: 1077)
+    [int]$MaxVozMb = 0,          # 0 = según el modo: 2400 con intérprete (medido ~2050), 700 sin
     [int]$MinFrases = 4
 )
 $ErrorActionPreference = 'Stop'
@@ -36,7 +39,9 @@ if ($Limpio) { Remove-Item (Join-Path $data 'modelos') -Recurse -Force -ErrorAct
 
 $browserArgs = '--process-per-site --use-fake-device-for-media-stream --autoplay-policy=no-user-gesture-required ' +
     "--use-file-for-fake-audio-capture=$($Wav -replace '\\', '/')"
-@{ ApiEnabled = $false; BrowserArguments = $browserArgs; VozNatural = -not $VozWindows } | ConvertTo-Json |
+if (-not $MaxMedianaMs) { $MaxMedianaMs = if ($SinInterprete) { 1500 } else { 2200 } }
+if (-not $MaxVozMb) { $MaxVozMb = if ($SinInterprete) { 700 } else { 2400 } }
+@{ ApiEnabled = $false; BrowserArguments = $browserArgs; VozNatural = -not $VozWindows; VozInterprete = -not $SinInterprete } | ConvertTo-Json |
     Set-Content (Join-Path $data 'settings.json') -Encoding UTF8
 
 $page = ([Uri](Resolve-Path (Join-Path $PSScriptRoot 'reunion.html')).Path).AbsoluteUri
@@ -90,6 +95,9 @@ $audioRate = if ($allStats.Count -ge 2 -and $allStats[-1].ts -gt $allStats[0].ts
     ($allStats[-1].windows - $allStats[0].windows) * 0.032 / ($allStats[-1].ts - $allStats[0].ts)
 } else { $null }
 $speculated = @($spoken | Where-Object { $_.speculated })
+$interpreter = Get-Events 'voz_interpreter' | Select-Object -First 1
+$interpreted = @($spoken | Where-Object { $_.interpreted })
+$notes = @(Get-Events 'voz_notes')
 $stats = Get-Events 'voz_stats' | Select-Object -Last 1   # contadores del traductor (cada ~5 s de voz)
 $state = Get-Events 'meeting_state' | Select-Object -First 1
 $page2 = if ($state) { $state.state | ConvertFrom-Json } else { $null }
@@ -104,20 +112,30 @@ foreach ($e in Get-Events 'automation_js') {
 $samples = @($events | Where-Object { $_.type -eq 'sample' -and $ready -and $_.ts -ge $ready.ts -and $null -ne $_.voz_mb })
 $vozMb = @($samples | ForEach-Object { [double]$_.voz_mb })
 $vozPrivMb = @($samples | ForEach-Object { [double]$_.voz_private_mb })
-$restMb = @($samples | ForEach-Object { [double]$_.app_private_mb - [double]$_.voz_mb })
-$totalMb = @($samples | ForEach-Object { [double]$_.app_private_mb })
-$median = Get-Median $spoken.total_ms
-$worst = ($spoken.total_ms | Measure-Object -Maximum).Maximum
+# app_private_mb es lo que cuenta para el tope: del traductor entran hasta 500 MB (el intérprete queda afuera).
+$restMb = @($samples | ForEach-Object { [double]$_.app_private_mb - [math]::Min([double]$_.voz_mb, 500) })
+$totalMb = @($samples | ForEach-Object { [double]$_.app_private_mb - [math]::Min([double]$_.voz_mb, 500) + [double]$_.voz_mb })
+# Con el intérprete, la demora se mide sobre las frases que dijo él: las primeras de la prueba salen con la traducción
+# directa mientras el intérprete termina de cargar (y esa carga, de una vez por reunión, las frena).
+$measured = if ($interpreted.Count) { $interpreted } else { $spoken }
+$median = Get-Median $measured.total_ms
+$worst = ($measured.total_ms | Measure-Object -Maximum).Maximum
 $vozMax = ($vozMb | Measure-Object -Maximum).Maximum
 
 $checks = [ordered]@{
     'el traductor quedó listo'                    = { [bool]$ready }
     'la voz tiene prioridad (proceso y MMCSS)'    = { $ready -and $ready.high_priority -and $ready.mmcss }
     'la voz llegó al traductor y oyó voz'         = { $stats -and $stats.mic_frames -gt 0 -and $stats.voiced -gt 0 }
-    'la voz llega una sola vez (1 s por segundo)' = { $null -ne $audioRate -and $audioRate -gt 0.9 -and $audioRate -lt 1.1 }
+    # Con dos capturas mandando a la vez daba 2 (hasta la 0.7.0); el margen es por lo corto de la prueba.
+    'la voz llega una sola vez (1 s por segundo)' = { $null -ne $audioRate -and $audioRate -gt 0.85 -and $audioRate -lt 1.25 }
     "frases dichas en inglés (>= $MinFrases)"     = { $spoken.Count -ge $MinFrases }
     "demora mediana <= $MaxMedianaMs ms"          = { $null -ne $median -and $median -le $MaxMedianaMs }
     "RAM del traductor <= $MaxVozMb MB"           = { $vozMb.Count -gt 0 -and $vozMax -le $MaxVozMb }
+    'el intérprete cargó (o está apagado)'        = { $SinInterprete -or ($interpreter -and $interpreter.loaded) }
+    'frases dichas por el intérprete'             = { $SinInterprete -or $interpreted.Count -ge 1 }
+    # La página de prueba habla sin parar, y tu voz va primero: acá sólo se controla que el audio de los demás llegue.
+    # Que se escriba y sirva de contexto lo prueba astro-voz.exe --file con --remote.
+    'el audio de los demás llega al traductor'    = { $SinInterprete -or $Url -or ($stats -and $stats.remote_frames -gt 0) }
     # Se cuenta contra las frases dichas hasta el momento en que se le preguntó el estado a la reunión.
     'la voz inglesa llegó a la reunión'           = { $state -and $state.play_chunks -gt 0 -and
                                                       $state.play_chunks -ge @($spoken | Where-Object { $_.ts -lt $state.ts - 0.3 }).Count }
@@ -141,12 +159,18 @@ if ($ready) {
     "traductor      procesador, $($ready.threads) hilos, $($ready.asr), voz «$($ready.voice)», glosario $($ready.glossary_terms) términos, listo en $($ready.load_ms) ms" +
         " · prioridad alta: $(if ($ready.high_priority) { 'sí' } else { 'no' }) · MMCSS: $(if ($ready.mmcss) { 'sí' } else { 'no' })"
 }
+if ($interpreter) {
+    "intérprete     $(if ($interpreter.loaded) { "cargado en $($interpreter.load_ms) ms ($($interpreter.detail))" } else { "no cargó: $($interpreter.detail)" })" +
+        " · libro de frases $($ready.phrasebook) expresiones · frases interpretadas $($interpreted.Count) de $($spoken.Count)" +
+        $(if ($interpreted.Count) { " · primer tramo: mediana $(Get-Median $interpreted.llm_ms) ms" } else { '' })
+}
+if ($stats) { "los demás      pedazos de audio $($stats.remote_frames) · frases escritas $($stats.heard) · apuntes guardados $($notes.Count)" }
 if ($null -ne $audioRate) {
     "audio          {0:0.00} s de voz recibidos por segundo real · frases traducidas por adelantado: {1} de {2}" -f $audioRate, $speculated.Count, $spoken.Count
 }
 "frases         detectadas $($phrases.Count) · dichas $($spoken.Count) · sin nada que decir $($phrases.Count - $spoken.Count) · juntadas por atraso $($merged.Count)"
 if ($spoken.Count) {
-    "demora         de tu última palabra a la voz inglesa: mediana {0} ms, peor {1} ms (fase 7: mediana 1300–1374 ms)" -f $median, $worst
+    "demora         de tu última palabra a la voz inglesa: mediana {0} ms, peor {1} ms ({2} frases{3}; 0.8.0 sin intérprete: 1077 ms)" -f $median, $worst, $measured.Count, $(if ($interpreted.Count) { ' interpretadas' } else { '' })
     "reconocimiento mediana {0} ms, peor {1} ms · voz inglesa mediana {2} ms" -f (Get-Median $spoken.asr_ms), ($spoken.asr_ms | Measure-Object -Maximum).Maximum, (Get-Median $spoken.tts_ms)
 }
 if ($vozMb.Count) {

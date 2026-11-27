@@ -83,6 +83,7 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
                      "--pipe", pipeName, "--models", app.Paths.VozModels, "--data", app.Paths.Root,
                      "--parent", Environment.ProcessId.ToString(),
                      "--voice", app.Settings.VozNatural ? "natural" : "windows", "--learn", app.Settings.VozAprende ? "on" : "off",
+                     "--interpreter", app.Settings.VozInterprete ? "on" : "off", "--notes", app.Settings.VozExpresiones ? "on" : "off",
                  })
             start.ArgumentList.Add(arg);
         Process process;
@@ -165,9 +166,12 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
                 OnUi(() =>
                 {
                     if (_session != session) return;
+                    // Antes de estar listo se prepara la traducción; después, lo que llega es el intérprete, que se
+                    // suma con la reunión ya andando.
+                    var what = Ready ? "Sumando el intérprete" : "Preparando la traducción";
                     SetStatus(status.Phase == "downloading"
-                        ? $"Preparando la traducción (una sola vez): bajando {status.Detail} {status.Progress * 100:0} %"
-                        : $"Preparando la traducción: {status.Detail}…");
+                        ? $"{what} (una sola vez): bajando {status.Detail} {status.Progress * 100:0} %"
+                        : $"{what}: {status.Detail}…");
                 });
                 break;
             case VozFrame.Ready:
@@ -178,7 +182,8 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
                     Ready = true;
                     app.Log.Event("voz_ready", ("load_ms", ready.LoadMs), ("asr", ready.Asr),
                         ("voice", ready.Voice), ("threads", ready.Threads), ("pid", session.Process.Id),
-                        ("high_priority", ready.HighPriority), ("mmcss", ready.Mmcss), ("glossary_terms", ready.GlossaryTerms));
+                        ("high_priority", ready.HighPriority), ("mmcss", ready.Mmcss), ("glossary_terms", ready.GlossaryTerms),
+                        ("phrasebook", ready.Phrasebook));
                     SetStatus(null);
                     app.Meetings.OfferBuiltIn(this);
                 });
@@ -187,12 +192,24 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
                 var p = VozProtocol.Parse<VozPhrase>(payload);
                 app.Log.Event("voz_phrase", ("tab_id", p.Tab), ("spoken", p.Spoken), ("reason", p.Reason), ("audio_ms", p.AudioMs),
                     ("asr_ms", p.AsrMs), ("tts_ms", p.TtsMs), ("total_ms", p.TotalMs), ("merged", p.Merged), ("pending", p.Pending), ("chars", p.Chars),
-                    ("speculated", p.Speculated));
+                    ("speculated", p.Speculated), ("interpreted", p.Interpreted), ("llm_ms", p.LlmMs), ("hints", p.Hints), ("context", p.Context),
+                    ("queue_ms", p.QueueMs));
                 break;
             case VozFrame.Stats:
                 var stats = VozProtocol.Parse<VozStats>(payload);
                 app.Log.Event("voz_stats", ("mic_frames", stats.MicFrames), ("windows", stats.Windows), ("voiced", stats.Voiced),
-                    ("phrases", stats.Phrases), ("done", stats.Done));
+                    ("phrases", stats.Phrases), ("done", stats.Done), ("remote_frames", stats.RemoteFrames), ("heard", stats.Heard));
+                break;
+            case VozFrame.Interpreter:
+                var interpreter = VozProtocol.Parse<VozInterpreter>(payload);
+                app.Log.Event("voz_interpreter", ("loaded", interpreter.Loaded), ("detail", interpreter.Detail), ("load_ms", interpreter.LoadMs));
+                OnUi(() =>
+                {
+                    if (_session == session) SetStatus(null);
+                });
+                break;
+            case VozFrame.Notes:
+                app.Log.Event("voz_notes", ("expressions", VozProtocol.Parse<VozNotes>(payload).Expressions));
                 break;
             case VozFrame.Error:
                 var error = VozProtocol.Parse<VozError>(payload);
@@ -282,6 +299,14 @@ public sealed class VozTranslator(AppServices app) : IMeetingTranslator
         // Lo que se dice en una ventana privada se traduce pero no se aprende.
         if (_announced.Add(tabId) && app.Meetings.IsPrivate(tabId)) session.Outgoing.Writer.TryWrite(VozProtocol.NoLearn(tabId));
         session.Outgoing.Writer.TryWrite(VozProtocol.Mic(tabId, pcm16k));
+    }
+
+    /// <summary>Lo que suena en la reunión (la voz de los demás): contexto para el intérprete. En el hilo de la interfaz.</summary>
+    public void OnRemoteAudio(int tabId, byte[] pcm16k)
+    {
+        if (!Ready || _session is not { } session) return;
+        if (_announced.Add(tabId) && app.Meetings.IsPrivate(tabId)) session.Outgoing.Writer.TryWrite(VozProtocol.NoLearn(tabId));
+        session.Outgoing.Writer.TryWrite(VozProtocol.Remote(tabId, pcm16k));
     }
 
     /// <summary>Una pestaña soltó el micrófono o dejó la reunión: lo que tenía de frase a medias sale ya.</summary>

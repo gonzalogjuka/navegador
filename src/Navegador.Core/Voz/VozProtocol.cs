@@ -15,6 +15,8 @@ public enum VozFrame : byte
     Bye = 3,
     /// <summary>Lo que se diga en esta pestaña no se aprende (ventana privada): int32 pestaña.</summary>
     NoLearn = 4,
+    /// <summary>Lo que suena en la reunión (la voz de los demás): int32 pestaña + PCM 16 kHz mono de 16 bits.</summary>
+    Remote = 5,
 
     // Traductor → Astro
     /// <summary>JSON <see cref="VozStatus"/>: qué está preparando.</summary>
@@ -29,6 +31,10 @@ public enum VozFrame : byte
     Error = 20,
     /// <summary>JSON <see cref="VozStats"/>: cada pocos segundos mientras llega voz, para ver que todo el camino anda.</summary>
     Stats = 21,
+    /// <summary>JSON <see cref="VozInterpreter"/>: el intérprete terminó de cargar (o no se pudo).</summary>
+    Interpreter = 22,
+    /// <summary>JSON <see cref="VozNotes"/>: se guardaron los apuntes de la reunión.</summary>
+    Notes = 23,
 }
 
 /// <summary>Contadores del traductor desde que arrancó.</summary>
@@ -37,7 +43,9 @@ public enum VozFrame : byte
 /// <param name="Voiced">Ventanas en las que el detector oyó voz.</param>
 /// <param name="Phrases">Frases cortadas.</param>
 /// <param name="Done">Frases terminadas (traducidas, con o sin algo para decir).</param>
-public sealed record VozStats(long MicFrames, long Windows, long Voiced, int Phrases, int Done);
+/// <param name="RemoteFrames">Pedazos de audio de los demás recibidos de Astro.</param>
+/// <param name="Heard">Frases de los demás ya escritas.</param>
+public sealed record VozStats(long MicFrames, long Windows, long Voiced, int Phrases, int Done, long RemoteFrames = 0, int Heard = 0);
 
 /// <param name="Phase">"downloading" (con Progress 0..1) o "loading".</param>
 public sealed record VozStatus(string Phase, string Detail, double Progress = 0);
@@ -45,18 +53,31 @@ public sealed record VozStatus(string Phase, string Detail, double Progress = 0)
 /// <param name="HighPriority">El proceso quedó con prioridad alta y sin ahorro de energía.</param>
 /// <param name="Mmcss">Los hilos de audio quedaron anotados en el planificador multimedia de Windows.</param>
 /// <param name="GlossaryTerms">Términos del glosario y aprendidos que van de pista al reconocedor.</param>
+/// <param name="Phrasebook">Expresiones del libro de frases del intérprete.</param>
 public sealed record VozReady(string Asr, string? Voice, int Threads, int LoadMs, bool HighPriority = false, bool Mmcss = false,
-    int GlossaryTerms = 0);
+    int GlossaryTerms = 0, int Phrasebook = 0);
+
+/// <param name="Loaded">El intérprete (modelo de lenguaje) quedó cargado; false: se sigue con la traducción directa.</param>
+/// <param name="Detail">Por qué no se cargó, o el nombre del modelo.</param>
+public sealed record VozInterpreter(bool Loaded, string Detail, int LoadMs = 0);
+
+/// <param name="Expressions">Expresiones de los demás que se anotaron (la cuenta; el texto no viaja).</param>
+public sealed record VozNotes(int Expressions);
 
 /// <param name="Spoken">false: la frase no tenía nada para decir (ruido, silencio) y no se mandó voz.</param>
-/// <param name="TtsMs">Lo que tardó en estar lista la voz de la primera oración.</param>
-/// <param name="TotalMs">De tu última palabra a que sale la voz traducida (la primera oración).</param>
+/// <param name="TtsMs">Lo que tardó en estar lista la voz del primer tramo.</param>
+/// <param name="TotalMs">De tu última palabra a que sale la voz traducida (el primer tramo).</param>
 /// <param name="Merged">Frases atrasadas que se juntaron en una (1 = ninguna).</param>
 /// <param name="Pending">Frases esperando turno cuando salió esta.</param>
 /// <param name="Chars">Largo del texto en inglés (el texto no viaja ni se guarda).</param>
 /// <param name="Speculated">Se empezó a traducir antes de confirmar que la frase había terminado (adelanto).</param>
+/// <param name="Interpreted">La dijo el intérprete (modelo de lenguaje); false: traducción directa de Whisper.</param>
+/// <param name="LlmMs">Lo que tardó el intérprete en tener el primer tramo.</param>
+/// <param name="Hints">Expresiones del libro de frases que se usaron de pista.</param>
+/// <param name="Context">Se usó de contexto lo que venían diciendo los demás.</param>
+/// <param name="QueueMs">Lo que esperó la frase a que el traductor terminara lo que estaba haciendo.</param>
 public sealed record VozPhrase(int Tab, bool Spoken, string Reason, int AudioMs, int AsrMs, int TtsMs, int TotalMs, int Merged, int Pending,
-    int Chars = 0, bool Speculated = false);
+    int Chars = 0, bool Speculated = false, bool Interpreted = false, int LlmMs = 0, int Hints = 0, bool Context = false, int QueueMs = 0);
 
 /// <param name="Fatal">true: el traductor no puede seguir (la reunión lleva la voz original).</param>
 public sealed record VozError(string Message, bool Fatal);
@@ -94,6 +115,14 @@ public static class VozProtocol
     public static byte[] TabClosed(int tab) => TabFrame(VozFrame.TabClosed, tab);
 
     public static byte[] NoLearn(int tab) => TabFrame(VozFrame.NoLearn, tab);
+
+    public static byte[] Remote(int tab, ReadOnlySpan<byte> pcm16k)
+    {
+        var frame = NewFrame(VozFrame.Remote, 4 + pcm16k.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(HeaderSize), tab);
+        pcm16k.CopyTo(frame.AsSpan(HeaderSize + 4));
+        return frame;
+    }
 
     private static byte[] TabFrame(VozFrame type, int tab)
     {

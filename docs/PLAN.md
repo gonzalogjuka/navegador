@@ -158,10 +158,26 @@ Kokoro suena mejor que Piper pero tarda el doble de lo que dura la frase en este
 contexto empeora. Sigue valiendo "sólo el procesador" y "sin LLM". Pendiente: sesión en vivo con la voz de Gonzalo para
 un banco nuevo (el del 26/11 está grabado con el audio duplicado); clonar su voz quedó para después, por pedido suyo.
 
-**Regla de la fase (Gonzalo, 2026-11-25): el navegador funciona completo sin ningún LLM ni IA.** Las integraciones
+### Fase 10: intérprete (2026-11-26, hecho)
+
+Pedido de Gonzalo: "interpretar la charla y capturar las mejores expresiones". Detalle y mediciones en el CHANGELOG (0.9.0).
+
+| # | Qué | Resultado medido |
+|---|---|---|
+| 10.1 | **Intérprete**: Whisper escribe en español y un modelo de lenguaje local (Qwen2.5-1.5B, sólo procesador; `Astro.Voz/Interpreter.cs`) lo dice en inglés por el sentido, con la conversación en memoria, por tramos y con adelanto. | Mediana 1,55 s en diálogo (1,08 s sin él); 2,1 GB |
+| 10.2 | **Libro de frases** (`Navegador.Core/Voz/Phrasebook.cs`, `voz-expresiones.txt`): modismos con su expresión en inglés, de pista al modelo. | "no me cierra" → "doesn't add up" |
+| 10.3 | **Escuchar a los demás**: `virtual-mic.js` manda el audio remoto; se escribe cuando no hablás; contexto, términos y expresiones. | Contexto usado en 4 de 7 frases del diálogo de prueba |
+| 10.4 | **Apuntes** (`MeetingNotes.cs`, `voz-reuniones\`): expresiones de los demás (elegidas por el modelo, filtradas contra lo oído) y tus modismos. | 4 expresiones reales de 4 frases oídas |
+
+Pendiente: probarlo en una reunión real y afinar con eso (instrucciones del intérprete, libro de frases, umbrales); que
+el contexto se evalúe antes de que termines de hablar (ahorra ~150 ms en las frases con contexto).
+
+**Regla de la fase 6 (Gonzalo, 2026-11-25): el navegador funciona completo sin ningún LLM ni IA.** Las integraciones
 (API local, MCP, panel lateral, extensiones) son opcionales y se enchufan desde afuera: nada del navegador las necesita
 para andar, ninguna función propia llama a un servicio de IA, y si no hay nada conectado todo sigue igual (el modo
 reunión manda tu voz original). El servidor MCP es un programa aparte que sólo usa la API pública, como cualquier otra app.
+**Excepción (Gonzalo, 2026-11-26): el intérprete del traductor de voz** usa un modelo de lenguaje local; nada más. Con
+`VozInterprete` apagado, o si el modelo no carga, todo sigue como antes.
 
 Cambios a decisiones anteriores: las extensiones dejan de estar fuera de alcance; el canal página→app
 (`IsWebMessageEnabled`) se habilita **sólo** en la pestaña con modo reunión y sólo acepta mensajes de audio.
@@ -196,8 +212,11 @@ Fuera por ahora: cabecera `Sec-GPC` (WebView2 no permite agregar cabeceras sin i
 `BlockingEnabled` (true), `SearchUrl` (Google), `AllowSites` (escudo), `BrowserArguments` (`--process-per-site`),
 `HttpsFirst` (true), `BlockNotifications` (true), `VozEnabled` (true: traductor incorporado en el modo reunión),
 `VozNatural` (true: voz inglesa neuronal; false: la de Windows, ~200 MB menos), `VozAprende` (true: anota los nombres
-que usás en `voz-aprendido.json`). Se abren desde el menú ⋮ → Ajustes y se releen al reiniciar. El glosario del
-traductor es `voz-glosario.txt`, en la misma carpeta.
+que usás en `voz-aprendido.json`), `VozInterprete` (true: modelo de lenguaje local que dice lo que querés decir; false:
+traducción directa, ~1,6 GB menos y ~0,5 s más rápido), `VozEscucha` (true: escucha a los demás para tener contexto),
+`VozExpresiones` (true: anota las expresiones de cada reunión en `voz-reuniones\`). Se abren desde el menú ⋮ → Ajustes
+y se releen al reiniciar. En la misma carpeta: `voz-glosario.txt` (tus nombres y términos) y `voz-expresiones.txt` (tus
+modismos y cómo decirlos).
 
 ## Riesgos conocidos
 - **RivaTuner Statistics Server (MSI Afterburner)** inyecta `RTSSHooks64.dll` y tira el proceso principal de WebView2

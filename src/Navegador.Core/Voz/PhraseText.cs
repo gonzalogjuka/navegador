@@ -94,8 +94,8 @@ public static partial class PhraseText
     private static partial Regex Spaces();
 
     // "Thank you" solo NO se descarta: "gracias" se dice en serio en una reunión, y el detector de voz ya evita que el
-    // reconocedor reciba silencio. Los pedidos de suscripción son lo que Whisper inventa con muy poca voz (26/11:
-    // "¡Suscríbete!", "Suscribete y dale like"): nadie los dice en una reunión.
-    [GeneratedRegex(@"^\W*(thanks for watching|thank you for watching|you|subtitles by .*|(please )?(like and )?subscribe\b.*|suscr[ií]bete\b.*)\W*$", RegexOptions.IgnoreCase)]
+    // reconocedor reciba silencio. Los pedidos de suscripción y los créditos de subtítulos son lo que Whisper inventa
+    // con muy poca voz (26/11: "¡Suscríbete!", "Suscribete y dale like"): nadie los dice en una reunión.
+    [GeneratedRegex(@"^\W*(thanks for watching|thank you for watching|gracias por ver( el video)?|you|subtitles by .*|subt[ií]tulos (realizados |hechos |creados )?(por|de) .*|(please )?(like and )?subscribe\b.*|suscr[ií]bete\b.*)\W*$", RegexOptions.IgnoreCase)]
     private static partial Regex Hallucination();
 }

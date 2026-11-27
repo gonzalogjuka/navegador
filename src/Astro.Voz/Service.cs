@@ -16,13 +16,14 @@ internal sealed class Service : IDisposable
     private readonly NamedPipeClientStream _pipe;
     private readonly object _writeLock = new();
     private readonly Dictionary<int, (PhraseSegmenter Segmenter, SpeechDetector.Stream Detector)> _tabs = [];
+    private readonly Dictionary<int, (PhraseSegmenter Segmenter, SpeechDetector.Stream Detector)> _remoteTabs = [];
     private readonly CancellationTokenSource _stop = new();
     private Setup? _setup;
     private volatile Translator? _translator;
     private bool _highPriority;
     /// <summary>Cada ~5 s de voz recibida (pedazos de ~21 ms) se le mandan los contadores a Astro.</summary>
     private const int StatsEveryFrames = 240;
-    private long _micFrames, _windows, _voiced;
+    private long _micFrames, _windows, _voiced, _remoteFrames;
 
     private Service(Options options, NamedPipeClientStream pipe)
     {
@@ -76,16 +77,25 @@ internal sealed class Service : IDisposable
                 {
                     case VozFrame.Mic when _translator is { } translator:
                         var (tab, pcm) = VozProtocol.ParseMic(payload);
-                        SegmenterOf(tab).Push(pcm.Span, Translator.NowMs(), phrase => translator.Confirm(tab, phrase), tentative =>
+                        var segmenter = SegmenterOf(tab);
+                        segmenter.Push(pcm.Span, Translator.NowMs(), phrase => translator.Confirm(tab, phrase), tentative =>
                         {
                             if (tentative is null) translator.Withdraw(tab);
                             else translator.Tentative(tab, tentative);
                         });
+                        translator.Speaking(segmenter.Active || AnyoneSpeaking());
                         if (++_micFrames % StatsEveryFrames == 0)
-                            Send(VozProtocol.Message(VozFrame.Stats, new VozStats(_micFrames, _windows, _voiced, translator.Phrases, translator.Done)));
+                            Send(VozProtocol.Message(VozFrame.Stats, new VozStats(_micFrames, _windows, _voiced, translator.Phrases, translator.Done,
+                                _remoteFrames, translator.HeardDone)));
+                        break;
+                    case VozFrame.Remote when _translator is { } translator:
+                        var (remoteTab, remotePcm) = VozProtocol.ParseMic(payload);
+                        _remoteFrames++;
+                        RemoteSegmenterOf(remoteTab).Push(remotePcm.Span, Translator.NowMs(), phrase => translator.Heard(remoteTab, phrase));
                         break;
                     case VozFrame.TabClosed:
                         CloseTab(VozProtocol.TabOf(payload));
+                        _translator?.SaveNotesSoon();
                         break;
                     case VozFrame.NoLearn:
                         _translator?.NoLearn(VozProtocol.TabOf(payload));
@@ -116,11 +126,37 @@ internal sealed class Service : IDisposable
         return segmenter;
     }
 
+    /// <summary>Lo que dicen los demás se corta en frases igual que tu voz, con su propio detector. Sin adelantos.</summary>
+    private PhraseSegmenter RemoteSegmenterOf(int tab)
+    {
+        if (_remoteTabs.TryGetValue(tab, out var entry)) return entry.Segmenter;
+        var detector = _setup!.Detector.NewStream();
+        var segmenter = new PhraseSegmenter(detector.IsSpeech, Translator.HeardSegments);
+        _remoteTabs[tab] = (segmenter, detector);
+        return segmenter;
+    }
+
     private void CloseTab(int tab)
     {
-        if (!_tabs.Remove(tab, out var entry)) return;
-        entry.Segmenter.Flush(phrase => _translator?.Confirm(tab, phrase));
-        entry.Detector.Dispose();
+        if (_tabs.Remove(tab, out var entry))
+        {
+            entry.Segmenter.Flush(phrase => _translator?.Confirm(tab, phrase));
+            entry.Detector.Dispose();
+            _translator?.Speaking(AnyoneSpeaking());
+        }
+        if (_remoteTabs.Remove(tab, out var remote))
+        {
+            remote.Segmenter.Flush(phrase => _translator?.Heard(tab, phrase));
+            remote.Detector.Dispose();
+        }
+    }
+
+    /// <summary>Alguna pestaña tiene una frase tuya en curso.</summary>
+    private bool AnyoneSpeaking()
+    {
+        foreach (var (segmenter, _) in _tabs.Values)
+            if (segmenter.Active) return true;
+        return false;
     }
 
     // ---------- Hilo que traduce ----------
@@ -152,16 +188,40 @@ internal sealed class Service : IDisposable
             OnAudio = (tab, rate, pcm) => Send(VozProtocol.Play(tab, rate, pcm)),
             OnDone = result =>
             {
-                Dump(result.Phrase, result.English);
+                Dump(result);
                 Send(VozProtocol.Message(VozFrame.Phrase, result.Info));
             },
             OnError = ex => Send(VozProtocol.Message(VozFrame.Error, new VozError(ex.Message, Fatal: false))),
+            OnNotes = expressions => Send(VozProtocol.Message(VozFrame.Notes, new VozNotes(expressions))),
+            Phrasebook = _setup.Phrasebook, Notes = _setup.Notes, NotesDir = _setup.NotesDir,
         };
         Send(VozProtocol.Message(VozFrame.Ready, new VozReady(ModelStore.Whisper.File, _setup.Voice.Name, _options.Threads,
             (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds, _highPriority, mmcss,
-            GlossaryTerms: _setup.Glossary is { } g ? g.UserTerms.Count + g.LearnedTerms.Count() : 0)));
+            GlossaryTerms: _setup.Glossary is { } g ? g.UserTerms.Count + g.LearnedTerms.Count() : 0,
+            Phrasebook: _setup.Phrasebook?.Count ?? 0)));
         _translator = translator; // desde acá el hilo del pipe le pasa la voz
+        // El intérprete tarda en cargar (y la primera vez hay que bajarlo): la reunión ya anda con la traducción directa
+        // y pasa a interpretar cuando está listo.
+        new Thread(() => LoadInterpreter(translator)) { IsBackground = true, Name = "cargar intérprete" }.Start();
         return translator;
+    }
+
+    private void LoadInterpreter(Translator translator)
+    {
+        var started = Stopwatch.GetTimestamp();
+        string? problem;
+        try
+        {
+            problem = _setup!.LoadInterpreter(_options, (phase, detail, progress) =>
+                Send(VozProtocol.Message(VozFrame.Status, new VozStatus(phase, detail, progress))), _stop.Token);
+        }
+        catch (Exception ex)
+        {
+            problem = ex.Message; // pase lo que pase con el intérprete, la traducción directa sigue
+        }
+        if (problem is null) translator.Interpreter = _setup!.Interpreter;
+        Send(VozProtocol.Message(VozFrame.Interpreter, new VozInterpreter(problem is null, problem ?? ModelStore.InterpreterModel.File,
+            (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds)));
     }
 
     /// <summary>
@@ -172,8 +232,9 @@ internal sealed class Service : IDisposable
     private static readonly string? DumpDir = Environment.GetEnvironmentVariable("ASTRO_VOZ_VOLCAR") is { Length: > 0 } dir ? dir : null;
     private int _dumped;
 
-    private void Dump(Phrase phrase, string english)
+    private void Dump(Translator.Result result)
     {
+        var (phrase, english) = (result.Phrase, result.Spanish is null ? result.English : result.Spanish + "\n" + result.English);
         if (DumpDir is null) return;
         try
         {
@@ -207,6 +268,7 @@ internal sealed class Service : IDisposable
     public void Dispose()
     {
         foreach (var (_, detector) in _tabs.Values) detector.Dispose();
+        foreach (var (_, detector) in _remoteTabs.Values) detector.Dispose();
         _setup?.Dispose();
         _stop.Dispose();
     }

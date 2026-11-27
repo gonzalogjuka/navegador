@@ -836,6 +836,9 @@ public partial class MainWindow : Window
         catch (ArgumentException) { return null; }
     }
 
+    /// <summary>Lo máximo del traductor de voz que cuenta para el tope de RAM (ver <see cref="Sample"/>).</summary>
+    private const long VozBudgetCapBytes = 500L * 1024 * 1024;
+
     /// <summary>
     /// Memoria y CPU de todos los procesos del navegador: el propio y los de WebView2 de este entorno. La CPU es el
     /// porcentaje de la máquina (todos los núcleos = 100 %) entre esta muestra y la anterior.
@@ -860,6 +863,8 @@ public partial class MainWindow : Window
         // las pestañas de fondo se descartan antes y a la voz nunca le falta lugar. De él se cuenta la memoria física
         // (working set) y no la privada: Whisper reserva ~650 MB durante los ~0,3 s que tarda cada frase y no los llega
         // a usar (medido: la física no pasa de ~200 MB); contada, el tope descartaría pestañas por una reserva de un instante.
+        // Y se cuenta hasta VozBudgetCapBytes: con el intérprete el traductor ocupa ~1,5 GB, más que todo el tope de
+        // 1024 MB, y contado entero descartaría todas las pestañas durante cada reunión.
         var vozPid = _app.Voz.ProcessId;
         if (vozPid is { } voz) pids.Add(voz);
 
@@ -877,7 +882,7 @@ public partial class MainWindow : Window
                     vozPriv = p.PrivateMemorySize64;
                     vozRss = p.WorkingSet64;
                 }
-                priv += pid == vozPid ? p.WorkingSet64 : p.PrivateMemorySize64;
+                priv += pid == vozPid ? Math.Min(p.WorkingSet64, VozBudgetCapBytes) : p.PrivateMemorySize64;
                 rss += p.WorkingSet64;
                 if (renderers.Contains(pid)) rendererPriv += p.PrivateMemorySize64;
                 if (gpu.Contains(pid)) gpuPriv += p.PrivateMemorySize64;

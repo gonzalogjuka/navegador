@@ -18,6 +18,29 @@ window.medicion = null;
     window.vistaPrevia = await navigator.mediaDevices.getUserMedia({ audio: true });
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const track = stream.getAudioTracks()[0];
+    // Los demás: una conexión WebRTC de ida y vuelta dentro de la página devuelve como "pista remota" lo que la reunión
+    // recibe de este micrófono, y un <audio> sin volumen (no suena por los parlantes) la reproduce, como hace un sitio
+    // de reuniones con la voz de cada participante. Así voz.ps1 prueba que el traductor escucha a los demás.
+    try {
+      const a = new RTCPeerConnection(), b = new RTCPeerConnection();
+      a.onicecandidate = e => e.candidate && b.addIceCandidate(e.candidate);
+      b.onicecandidate = e => e.candidate && a.addIceCandidate(e.candidate);
+      b.ontrack = e => {
+        const el = document.createElement('audio');
+        el.srcObject = e.streams[0] || new MediaStream([e.track]);
+        el.volume = 0;
+        el.autoplay = true;
+        document.body.appendChild(el);
+      };
+      a.addTrack(track, stream);
+      const offer = await a.createOffer();
+      await a.setLocalDescription(offer);
+      await b.setRemoteDescription(offer);
+      const answer = await b.createAnswer();
+      await b.setLocalDescription(answer);
+      await a.setRemoteDescription(answer);
+      window.pares = [a, b];
+    } catch (e) { window.remotoError = String(e && e.message || e); }
     const ctx = new AudioContext();
     const an = ctx.createAnalyser();
     an.fftSize = 8192;

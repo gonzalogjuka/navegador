@@ -7,75 +7,104 @@ namespace Astro.Voz;
 
 /// <summary>
 /// Prueba sin navegador (--file): pasa un WAV a ritmo de reunión (un pedazo de ~21 ms cada 21 ms) por el mismo detector,
-/// segmentador, traductor con adelanto y voz que usa la reunión, y deja en JSON las frases en inglés, la demora de cada
-/// una (de la última palabra a la voz inglesa) y la memoria del proceso. Tarda lo que dura el audio.
+/// segmentador, traductor con adelanto, intérprete y voz que usa la reunión, y deja en JSON las frases (lo que entendió
+/// en español y lo que dijo en inglés), la demora de cada una (de la última palabra a la voz inglesa) y la memoria del
+/// proceso. Con --remote, otro WAV en inglés suena a la vez y hace de "los demás". Tarda lo que dura el audio.
 /// </summary>
 internal static class FileTest
 {
-    private sealed record PhraseResult(int AudioMs, string Reason, string En, int AsrMs, int TtsMs, int TotalMs, bool Speculated,
-        int Merged, int TtsAudioMs);
+    private sealed record PhraseResult(int AudioMs, string Reason, string? Es, string En, int QueueMs, int AsrMs, int LlmMs, int TtsMs, int TotalMs,
+        bool Speculated, bool Interpreted, int Hints, bool Context, int Merged, int TtsAudioMs);
 
-    private sealed record Result(int Threads, string? Voice, int LoadMs, int DurationMs, IReadOnlyList<PhraseResult> Phrases,
-        int TotalMedianMs, int TotalMaxMs, int AsrMedianMs, int AsrMaxMs, int Withdrawn, IReadOnlyList<string> Glossary,
-        int PrivateMb, int WorkingSetMb, int PeakWorkingSetMb);
+    private sealed record Result(int Threads, string? Voice, string Interpreter, int LoadMs, int InterpreterLoadMs, int DurationMs,
+        IReadOnlyList<PhraseResult> Phrases, int TotalMedianMs, int TotalMaxMs, int AsrMedianMs, int AsrMaxMs, int LlmMedianMs, int Withdrawn,
+        int Heard, int NotesExpressions, string? NotesAnswer, IReadOnlyList<string> Glossary, int PrivateMb, int WorkingSetMb, int PeakWorkingSetMb);
 
     public static int Run(Options options)
     {
         var started = Stopwatch.GetTimestamp();
         using var setup = Setup.Load(options, (_, _, _) => { }, CancellationToken.None);
         var loadMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        // En la reunión el intérprete carga mientras ya se traduce; acá se lo espera, para medir con él desde la primera frase.
+        var interpreterProblem = setup.LoadInterpreter(options, (_, _, _) => { }, CancellationToken.None);
+        var interpreterLoadMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds - loadMs;
 
         var results = new List<PhraseResult>();
         var audioBytes = 0;
+        var notesExpressions = -1;
+        string? notesAnswer = null;
         var translator = new Translator(setup.Engine, setup.Voice, setup.Glossary, setup.LearnedPath)
         {
             OnAudio = (_, _, pcm) => audioBytes += pcm.Length,
             OnDone = r =>
             {
-                results.Add(new PhraseResult(r.Info.AudioMs, r.Info.Reason, r.English, r.Info.AsrMs, r.Info.TtsMs, r.Info.TotalMs,
-                    r.Info.Speculated, r.Info.Merged, audioBytes / 2 * 1000 / setup.Voice.Rate));
+                results.Add(new PhraseResult(r.Info.AudioMs, r.Info.Reason, r.Spanish, r.English, r.Info.QueueMs, r.Info.AsrMs, r.Info.LlmMs,
+                    r.Info.TtsMs, r.Info.TotalMs, r.Info.Speculated, r.Info.Interpreted, r.Info.Hints, r.Info.Context, r.Info.Merged,
+                    audioBytes / 2 * 1000 / setup.Voice.Rate));
                 audioBytes = 0;
             },
-            OnError = ex => results.Add(new PhraseResult(0, "error", ex.Message, 0, 0, 0, false, 1, 0)),
+            OnError = ex => results.Add(new PhraseResult(0, "error", null, ex.Message, 0, 0, 0, 0, 0, false, false, 0, false, 1, 0)),
+            OnNotes = count => notesExpressions = count,
+            OnNotesAnswer = answer => notesAnswer = answer,
+            Phrasebook = setup.Phrasebook, Notes = setup.Notes, NotesDir = setup.NotesDir,
         };
+        translator.Interpreter = setup.Interpreter;
         var worker = new Thread(translator.Run) { IsBackground = true, Name = "traducir" };
         worker.Start();
 
         var pcm = ReadWavAs16k(options.File!);
+        var remote = options.Remote is null ? [] : ReadWavAs16k(options.Remote);
         var withdrawn = 0;
         using (var stream = setup.Detector.NewStream())
+        using (var remoteStream = setup.Detector.NewStream())
         {
             var segmenter = new PhraseSegmenter(stream.IsSpeech);
+            var remoteSegmenter = new PhraseSegmenter(remoteStream.IsSpeech, Translator.HeardSegments);
             const int chunk = 682; // ~21 ms, como los pedazos que manda la pestaña en reunión
             var clock = Stopwatch.StartNew();
-            for (var i = 0; i < pcm.Length; i += chunk)
+            for (var i = 0; i < Math.Max(pcm.Length, remote.Length); i += chunk)
             {
                 var due = i / 32.0 - clock.Elapsed.TotalMilliseconds;
                 if (due > 1) Thread.Sleep((int)due);
-                segmenter.Push(pcm.AsSpan(i, Math.Min(chunk, pcm.Length - i)), Translator.NowMs(), p => translator.Confirm(0, p), t =>
+                if (i < pcm.Length)
                 {
-                    if (t is not null) translator.Tentative(0, t);
-                    else { translator.Withdraw(0); withdrawn++; }
-                });
+                    segmenter.Push(pcm.AsSpan(i, Math.Min(chunk, pcm.Length - i)), Translator.NowMs(), p => translator.Confirm(0, p), t =>
+                    {
+                        if (t is not null) translator.Tentative(0, t);
+                        else { translator.Withdraw(0); withdrawn++; }
+                    });
+                    translator.Speaking(segmenter.Active);
+                }
+                if (i < remote.Length)
+                    remoteSegmenter.Push(remote.AsSpan(i, Math.Min(chunk, remote.Length - i)), Translator.NowMs(), p => translator.Heard(0, p));
             }
             segmenter.Flush(p => translator.Confirm(0, p));
+            translator.Speaking(false);
+            remoteSegmenter.Flush(p => translator.Heard(0, p));
         }
-        // Lo que quedó en cola se termina de traducir antes de cerrar.
-        for (var waited = 0; translator.Done < translator.Phrases && waited < 30_000; waited += 20) Thread.Sleep(20);
+        // Lo que quedó en cola se termina (tus frases, lo de los demás y los apuntes) antes de cerrar.
+        translator.SaveNotesSoon();
+        for (var waited = 0; translator.Busy && waited < 90_000; waited += 20) Thread.Sleep(20);
         translator.Stop();
         worker.Join(TimeSpan.FromSeconds(5));
 
         var spoken = results.Where(r => r.En.Length > 0 && r.Reason != "error").ToList();
         var total = spoken.Select(r => r.TotalMs).Order().ToList();
         var asr = results.Select(r => r.AsrMs).Order().ToList();
+        var llm = spoken.Where(r => r.Interpreted).Select(r => r.LlmMs).Order().ToList();
         using var me = Process.GetCurrentProcess();
         const int mb = 1024 * 1024;
-        var result = new Result(options.Threads, setup.Voice.Name, loadMs, pcm.Length / 2 * 1000 / Engine.Rate, results,
+        var result = new Result(options.Threads, setup.Voice.Name, interpreterProblem ?? ModelStore.InterpreterModel.File, loadMs, interpreterLoadMs,
+            Math.Max(pcm.Length, remote.Length) / 2 * 1000 / Engine.Rate, results,
             total.Count > 0 ? total[total.Count / 2] : 0, total.Count > 0 ? total[^1] : 0,
-            asr.Count > 0 ? asr[asr.Count / 2] : 0, asr.Count > 0 ? asr[^1] : 0, withdrawn,
+            asr.Count > 0 ? asr[asr.Count / 2] : 0, asr.Count > 0 ? asr[^1] : 0, llm.Count > 0 ? llm[llm.Count / 2] : 0, withdrawn,
+            translator.HeardDone, notesExpressions, notesAnswer,
             setup.Glossary is { } g ? [.. g.UserTerms, .. g.LearnedTerms] : [],
             (int)(me.PrivateMemorySize64 / mb), (int)(me.WorkingSet64 / mb), (int)(me.PeakWorkingSet64 / mb));
-        var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        });
         if (options.Out is not null) File.WriteAllText(options.Out, json, new UTF8Encoding(false));
         else Console.Out.Write(json);
         return 0;

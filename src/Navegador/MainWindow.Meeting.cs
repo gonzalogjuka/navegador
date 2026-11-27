@@ -107,6 +107,10 @@ public partial class MainWindow
                     if (m.GetProperty("rate").GetInt32() != 16000) return;
                     _app.Meetings.MicAudio(tab, Convert.FromBase64String(m.GetProperty("pcm").GetString() ?? ""));
                     break;
+                case "remote":
+                    if (m.GetProperty("rate").GetInt32() != 16000) return;
+                    _app.Meetings.RemoteAudio(tab, Convert.FromBase64String(m.GetProperty("pcm").GetString() ?? ""));
+                    break;
                 case "ready":
                     SendMeetingMode(tab);
                     break;
@@ -145,6 +149,8 @@ public partial class MainWindow
             core.PostWebMessageAsJson(JsonSerializer.Serialize(new
             {
                 t = "mode", original = mix.Original, translated = mix.Translated, capture = mix.Capture,
+                // Escuchar a los demás: sólo para el traductor incorporado (su intérprete lo usa de contexto).
+                listen = mix.Capture && _app.Settings.VozEscucha && _app.Settings.VozInterprete && _app.Meetings.BuiltInConnected,
             }));
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { }

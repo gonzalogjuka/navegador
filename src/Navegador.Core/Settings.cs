@@ -46,6 +46,23 @@ public sealed class Settings
     /// para escribirlos y decirlos bien la próxima vez. Las ventanas privadas nunca se aprenden.
     /// </summary>
     public bool VozAprende { get; set; } = true;
+    /// <summary>
+    /// Intérprete: un modelo de lenguaje chico, local y sólo con el procesador, dice en inglés lo que querés decir (por el
+    /// sentido y con el contexto de la charla) en vez de la traducción directa de Whisper. Cuesta ~1,1 GB de memoria
+    /// durante la reunión, ~0,7 s más por frase y 940 MB de descarga la primera vez. Es la única función de Astro que
+    /// usa un modelo de lenguaje (decisión de Gonzalo, 26/11); apagado, todo sigue como antes.
+    /// </summary>
+    public bool VozInterprete { get; set; } = true;
+    /// <summary>
+    /// El traductor también escucha lo que dicen los demás en la reunión (en la PC, no sale de ahí): es el contexto del
+    /// intérprete, de ahí aprende los términos de la charla y salen las expresiones que se anotan.
+    /// </summary>
+    public bool VozEscucha { get; set; } = true;
+    /// <summary>
+    /// Al terminar cada reunión se anotan en voz-reuniones\ las expresiones en inglés que usaron los demás y cómo se
+    /// dijeron tus modismos (sólo expresiones sueltas, nunca la conversación; nunca en ventanas privadas).
+    /// </summary>
+    public bool VozExpresiones { get; set; } = true;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

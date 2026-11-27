@@ -87,6 +87,12 @@ public sealed class MeetingHub
         Translator?.OnMicAudio(tab.Id, pcm16k);
     }
 
+    /// <summary>Lo que suena en la reunión: sólo lo recibe el traductor incorporado (es el contexto de su intérprete).</summary>
+    internal void RemoteAudio(BrowserTab tab, byte[] pcm16k) => (Translator as VozTranslator)?.OnRemoteAudio(tab.Id, pcm16k);
+
+    /// <summary>El traductor conectado es el incorporado (el único que escucha a los demás).</summary>
+    internal bool BuiltInConnected => Translator is VozTranslator;
+
     /// <summary>Voz traducida para la pestaña: PCM mono, 16 bits little-endian, a <paramref name="sampleRate"/> Hz.</summary>
     public void Play(int tabId, byte[] pcm, int sampleRate)
     {

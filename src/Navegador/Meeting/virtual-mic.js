@@ -3,8 +3,10 @@
 // La página pide el micrófono como siempre (getUserMedia, con el permiso de siempre) y recibe una pista armada acá:
 //   voz original (ganancia `original`) + voz traducida que manda el navegador (ganancia `translated`).
 // Si hay un traductor escuchando (`capture`), la voz original va al navegador en PCM 16 kHz mono, 16 bits, base64.
-// Mensajes del navegador: {t:'mode', original, translated, capture} · {t:'play', rate, pcm} · {t:'state'}.
-// Mensajes al navegador: ready · mic {rate, pcm} · mic-started {label} · mic-stopped · state · error.
+// Si además el traductor quiere el contexto de la charla (`listen`), también va lo que dicen los demás: el audio de
+// las pistas remotas que la página puso a sonar en sus <audio>/<video> (sin tocar cómo suenan).
+// Mensajes del navegador: {t:'mode', original, translated, capture, listen} · {t:'play', rate, pcm} · {t:'state'}.
+// Mensajes al navegador: ready · mic {rate, pcm} · remote {rate, pcm} · mic-started {label} · mic-stopped · state · error.
 (() => {
   'use strict';
   if (window.top !== window) return;
@@ -29,7 +31,7 @@
 
   let ctx = null;
   let translatedBus = null;
-  let mode = { original: 1, translated: 0, capture: false };
+  let mode = { original: 1, translated: 0, capture: false, listen: false };
   let playAt = 0;
   let dropped = 0;
   // Ida y vuelta (sólo tiene sentido con un traductor que contesta un pedazo por pedazo, como el de prueba).
@@ -115,6 +117,84 @@
     let chosen = null;
     for (const s of sessions) if (s.real.enabled && s.real.readyState === 'live') chosen = s;
     return chosen;
+  }
+
+  // ---------- Lo que dicen los demás ----------
+  // Cada 2 s se miran los <audio>/<video> de la página que tienen puesta una pista remota (un MediaStream que no es
+  // el micrófono) y no están silenciados (la vista propia siempre lo está). Esas pistas se mezclan y, mientras haya
+  // sonido, van al traductor igual que la voz propia. No se toca ningún objeto de la página salvo `srcObject`, que
+  // sólo se mira para enterarse de los elementos que no están en el documento.
+  const REMOTE_SCAN_MS = 2000;
+  const REMOTE_HANGOVER_MS = 1200;   // se sigue mandando un rato de silencio: el traductor lo necesita para cortar la frase
+  const REMOTE_FLOOR = 0.003;
+  const remotes = new Map();         // id de pista → { source, el, track }
+  const mediaEls = new Set();
+  let remoteBus = null, remoteResample = null, remoteLoudUntil = 0, remoteChunks = 0;
+
+  function isOurs(track) {
+    for (const s of sessions) if (track === s.virtual || track === s.real) return true;
+    return false;
+  }
+
+  function remoteTap(c) {
+    if (remoteBus) return;
+    remoteBus = c.createGain();
+    const tap = c.createScriptProcessor(TAP_FRAMES, 1, 1);
+    const sink = c.createGain();
+    sink.gain.value = 0;
+    remoteBus.connect(tap);
+    tap.connect(sink).connect(c.destination);
+    tap.onaudioprocess = e => {
+      if (!mode.capture || !mode.listen || !remotes.size) { remoteResample = null; return; }
+      const input = e.inputBuffer.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < input.length; i += 8) { const v = Math.abs(input[i]); if (v > peak) peak = v; }
+      const now = performance.now();
+      if (peak > REMOTE_FLOOR) remoteLoudUntil = now + REMOTE_HANGOVER_MS;
+      if (now > remoteLoudUntil) { remoteResample = null; return; }
+      remoteResample = remoteResample || resampler(c.sampleRate);
+      const pcm = remoteResample(input);
+      if (!pcm.length) return;
+      post({ t: 'remote', rate: CAPTURE_RATE, pcm: encode(pcm) });
+      remoteChunks++;
+    };
+  }
+
+  function scanRemotes() {
+    if (!ctx || !mode.capture || !mode.listen) return;   // sin micrófono pedido todavía no hay reunión
+    try {
+      for (const el of document.querySelectorAll('audio, video')) mediaEls.add(el);
+      for (const el of mediaEls) {
+        const stream = el.srcObject;
+        if (!stream || typeof stream.getAudioTracks !== 'function' || el.muted || el.paused) continue;
+        for (const track of stream.getAudioTracks()) {
+          if (track.readyState !== 'live' || remotes.has(track.id) || isOurs(track)) continue;
+          remoteTap(ctx);
+          const source = ctx.createMediaStreamSource(new MediaStream([track]));
+          source.connect(remoteBus);
+          remotes.set(track.id, { source, el, track });
+        }
+      }
+      for (const [id, r] of remotes) {
+        const stream = r.el.srcObject;
+        if (r.track.readyState === 'live' && !r.el.muted && stream && stream.getAudioTracks().includes(r.track)) continue;
+        try { r.source.disconnect(); } catch (e) { /* ya desconectada */ }
+        remotes.delete(id);
+      }
+      for (const el of mediaEls) if (!el.isConnected && !el.srcObject) mediaEls.delete(el);
+    } catch (e) { post({ t: 'error', message: 'remoto: ' + String(e && e.message || e) }); }
+  }
+  setInterval(scanRemotes, REMOTE_SCAN_MS);
+
+  const srcObjectDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
+  if (srcObjectDesc && srcObjectDesc.set && srcObjectDesc.configurable) {
+    Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+      configurable: true, enumerable: srcObjectDesc.enumerable, get: srcObjectDesc.get,
+      set(value) {
+        srcObjectDesc.set.call(this, value);
+        if (value) mediaEls.add(this);
+      },
+    });
   }
 
   function decode(b64) {
@@ -226,7 +306,7 @@
     const m = e.data;
     if (!m || typeof m !== 'object') return;
     if (m.t === 'mode') {
-      mode = { original: +m.original || 0, translated: +m.translated || 0, capture: !!m.capture };
+      mode = { original: +m.original || 0, translated: +m.translated || 0, capture: !!m.capture, listen: !!m.listen };
       sentAt.length = 0; // otro traductor u otro modo: la ida y vuelta y los cortes se empiezan a medir de nuevo
       rtts.length = 0;
       gaps = 0;
@@ -240,6 +320,7 @@
         rttMaxMs: rtts.length ? Math.round(Math.max(...rtts)) : null, gaps,
         tapMs: ctx ? Math.round(TAP_FRAMES / ctx.sampleRate * 1000) : null, jitterMs: Math.round(jitter * 1000),
         outputLatencyMs: ctx ? Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000) : null,
+        remotes: remotes.size, remoteChunks,
       });
     }
   });

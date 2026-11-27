@@ -55,6 +55,14 @@ internal static class ModelStore
     /// <summary>Lo imprescindible para traducir: detector de voz y reconocedor.</summary>
     public static readonly IReadOnlyList<Model> Required = [Vad, Whisper];
 
+    /// <summary>
+    /// El intérprete: Qwen2.5-1.5B-Instruct cuantizado (Q4_K_M), 940 MB, licencia Apache-2.0. No es imprescindible: se
+    /// baja con la reunión ya andando y mientras tanto (y si falla) Whisper traduce directo.
+    /// </summary>
+    public static readonly Model InterpreterModel = new("Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/9eadc66189c7641e1ddd226b8267a9119b2ce2d4/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        986048768, "1adf0b11065d8ad2e8123ea110d1ec956dab4ab038eab665614adba04b6c3370", "intérprete");
+
     private const int Attempts = 3;
     private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
 

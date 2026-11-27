@@ -43,14 +43,30 @@ internal sealed class Engine : IDisposable
         return engine;
     }
 
+    /// <summary>Qué se le pide al reconocedor.</summary>
+    public enum Mode
+    {
+        /// <summary>Español hablado → texto en inglés (la traducción directa de Whisper, sin intérprete).</summary>
+        SpanishToEnglish,
+        /// <summary>Español hablado → texto en español (lo que después interpreta el modelo de lenguaje).</summary>
+        Spanish,
+        /// <summary>Inglés hablado → texto en inglés (lo que dicen los demás en la reunión).</summary>
+        English,
+    }
+
     /// <summary>Texto en inglés de la frase, ya limpio; "" si no hay nada para decir.</summary>
+    public string Translate(float[] samples, string? prompt = null, CancellationToken cancel = default) =>
+        Recognize(samples, Mode.SpanishToEnglish, prompt, cancel);
+
+    /// <summary>Texto de la frase, ya limpio; "" si no hay nada.</summary>
     /// <param name="prompt">
     /// Pista con el vocabulario propio (<see cref="Glossary.Prompt"/>): Whisper escribe bien los nombres que ve ahí.
     /// La frase anterior NO va de pista: medido, tarda más y traduce peor.
     /// </param>
-    /// <param name="cancel">Corta la traducción en curso (un adelanto que ya no sirve) en ~15 ms.</param>
+    /// <param name="cancel">Corta el reconocimiento en curso (un adelanto que ya no sirve) en ~15 ms.</param>
+    /// <param name="threads">Hilos para esta frase (0 = los del traductor). Lo que dicen los demás se reconoce con menos.</param>
     /// <exception cref="OperationCanceledException">Se cortó por <paramref name="cancel"/>.</exception>
-    public string Translate(float[] samples, string? prompt = null, CancellationToken cancel = default)
+    public string Recognize(float[] samples, Mode mode, string? prompt = null, CancellationToken cancel = default, int threads = 0)
     {
         if (samples.Length < MinSamples) Array.Resize(ref samples, MinSamples);
         var context = Math.Clamp(samples.Length / SamplesPerContext + ContextMargin, MinContext, MaxContext);
@@ -61,8 +77,9 @@ internal sealed class Engine : IDisposable
         // Sin reintentos con más temperatura (TemperatureInc 0): una sola pasada, demora pareja. Si igual repite,
         // PhraseText deja la repetición una sola vez.
         var builder = _factory.CreateBuilder()
-            .WithLanguage("es").WithTranslate().WithNoContext().WithSingleSegment()
-            .WithThreads(_threads).WithTemperatureInc(0).WithAudioContextSize(context).WithMaxTokensPerSegment(maxTokens);
+            .WithLanguage(mode == Mode.English ? "en" : "es").WithNoContext().WithSingleSegment()
+            .WithThreads(threads > 0 ? threads : _threads).WithTemperatureInc(0).WithAudioContextSize(context).WithMaxTokensPerSegment(maxTokens);
+        if (mode == Mode.SpanishToEnglish) builder.WithTranslate();
         if (!string.IsNullOrEmpty(prompt)) builder.WithPrompt(prompt);
         var processor = builder.Build();
         try
